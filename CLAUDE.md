@@ -86,6 +86,9 @@ not `disabled`; responses mode when `supported_endpoints` lists `/responses`;
 a `[1m]` entry only when `max_prompt_tokens` is at least 1,000,000; entries
 without metadata fall back to name rules. Defaults: newest Opus/Sonnet/Haiku,
 falling back to another Claude family, then to the best non-Claude model.
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` = the smaller `max_prompt_tokens` of the Opus
+and Sonnet defaults (clamped to 100k..1M), because Claude Code assumes 1M for
+Sonnet 5+, Opus 4.7+ and unknown ids while Copilot enforces about 200k.
 Copilot Free (`sku: free_limited_copilot`) lists models it then refuses with
 `model_not_supported`; only its base models answer. Live list: `curl localhost:4000/v1/models -H "Authorization: Bearer $KEY"`.
 See README for the current catalog.

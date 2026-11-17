@@ -104,11 +104,14 @@ live `/models` metadata for your account and writes `config.yaml` and
 - **Which API:** a model that serves `/responses` (GPT-5.x, GPT-6 and Codex
   models) routes in responses mode. Claude models use Copilot's native
   `/v1/messages` through LiteLLM.
-- **1M context:** a `[1m]` variant appears only when Copilot's published prompt
-  limit for that model is at least one million tokens. Copilot caps many models
-  below their native window; `claude-sonnet-5`, for example, accepts 200k
-  prompt tokens there. Picking a `[1m]` variant in `/model` raises Claude
-  Code's context to 1M.
+- **Context window:** Copilot enforces its own prompt limits, often far below a
+  model's native window: `claude-sonnet-5` accepts 200k prompt tokens there.
+  Claude Code cannot see those limits. It assumes 1M for Sonnet 5 and later,
+  Opus 4.7 and later, and any model id it does not recognize. `cc-copilot`
+  therefore sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to the smaller published
+  prompt limit of the Opus and Sonnet defaults, so sessions compact before
+  Copilot rejects them. A `[1m]` variant appears only for models whose Copilot
+  prompt limit is at least one million tokens.
 - **Defaults:** the newest Opus, Sonnet and Haiku become
   `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` and
   `ANTHROPIC_DEFAULT_HAIKU_MODEL`. A plan without one of those families falls

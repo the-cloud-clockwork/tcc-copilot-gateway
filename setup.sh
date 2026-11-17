@@ -78,7 +78,7 @@ HELP
       ;;
   esac
   unset ANTHROPIC_API_KEY ANTHROPIC_MODEL CLAUDE_CODE_EXTRA_BODY
-  unset ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL
+  unset ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_AUTO_COMPACT_WINDOW
   export CLAUDE_CODE_USE_BEDROCK=0
   export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
   export ANTHROPIC_BASE_URL="$BASE_URL"
@@ -99,11 +99,11 @@ HELP
   fi
   if [[ -f "$REPO_DIR/defaults.env" ]]; then
     while IFS= read -r line; do
-      [[ "\$line" == ANTHROPIC_DEFAULT_*=* ]] && export "\$line"
+      [[ "\$line" == ANTHROPIC_DEFAULT_*=* || "\$line" == CLAUDE_CODE_AUTO_COMPACT_WINDOW=* ]] && export "\$line"
     done < "$REPO_DIR/defaults.env"
   fi
   echo "Copilot gateway ready. Run: claude"
-  echo "Defaults: opus=\${ANTHROPIC_DEFAULT_OPUS_MODEL:-none} sonnet=\${ANTHROPIC_DEFAULT_SONNET_MODEL:-none} haiku=\${ANTHROPIC_DEFAULT_HAIKU_MODEL:-none}"
+  echo "Defaults: opus=\${ANTHROPIC_DEFAULT_OPUS_MODEL:-none} sonnet=\${ANTHROPIC_DEFAULT_SONNET_MODEL:-none} haiku=\${ANTHROPIC_DEFAULT_HAIKU_MODEL:-none} compact-at=\${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-auto}"
   echo "(logs: cc-copilot-logs)"
 }
 

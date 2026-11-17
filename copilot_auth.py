@@ -233,11 +233,17 @@ def _uses_responses(model: dict[str, Any]) -> bool:
     return "codex" in ml or ml.startswith("gpt-5")
 
 
-def _accepts_one_million(model: dict[str, Any]) -> bool:
-    """Whether the model's published prompt limit reaches one million tokens; no published limit means no."""
+def _prompt_limit(model: dict[str, Any]) -> int | None:
+    """The model's published prompt limit in tokens, or its context window when no prompt limit is published."""
     limits = (model.get("capabilities") or {}).get("limits") or {}
     limit = limits.get("max_prompt_tokens", limits.get("max_context_window_tokens"))
-    return isinstance(limit, int) and limit >= ONE_MILLION
+    return limit if isinstance(limit, int) else None
+
+
+def _accepts_one_million(model: dict[str, Any]) -> bool:
+    """Whether the model's published prompt limit reaches one million tokens; no published limit means no."""
+    limit = _prompt_limit(model)
+    return limit is not None and limit >= ONE_MILLION
 
 
 def _public_name(model_id: str) -> str:
@@ -262,25 +268,17 @@ def plan_routes(models: list[dict[str, Any]]) -> list[Route]:
     return routes
 
 
-def claude_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
-    """Pick Claude Code's Opus, Sonnet and Haiku defaults from the newest kept model of each family.
-
-    A missing family falls back to another Claude family, and a plan with no Claude
-    model falls back to its first model by picker category.
-    """
-    kept = _kept_models(models)
-    newest: dict[str, tuple[tuple[int, ...], str]] = {}
+def _default_models(kept: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Map each Claude Code family (opus, sonnet, haiku) to the kept model that should back it."""
+    newest: dict[str, tuple[tuple[int, ...], dict[str, Any]]] = {}
     for model in kept:
         match = _CLAUDE_FAMILY.match(model["id"])
         if match:
             family, version = match.group(1), _version(match.group(2))
             if family not in newest or version > newest[family][0]:
-                newest[family] = (version, model["id"])
+                newest[family] = (version, model)
     if newest:
-        return {
-            f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL": next(newest[f][1] for f in order if f in newest)
-            for family, order in _FAMILY_ORDER.items()
-        }
+        return {family: next(newest[f][1] for f in order if f in newest) for family, order in _FAMILY_ORDER.items()}
     if not kept:
         return {}
     ranked = sorted(
@@ -289,8 +287,24 @@ def claude_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
         if m.get("model_picker_category") in _CATEGORY_ORDER
         else len(_CATEGORY_ORDER),
     )
-    best = _public_name(ranked[0]["id"])
-    return {f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL": best for family in _FAMILY_ORDER}
+    return dict.fromkeys(_FAMILY_ORDER, ranked[0])
+
+
+def claude_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
+    """Claude Code environment for this plan: the Opus, Sonnet and Haiku defaults and the auto-compact window.
+
+    Each family gets its newest kept model; a missing family falls back to another
+    Claude family, and a plan with no Claude model falls back to its first model by
+    picker category. The auto-compact window is the smaller published prompt limit
+    of the Opus and Sonnet defaults, kept within Claude Code's 100k to 1M range,
+    because Claude Code cannot see the lower limits Copilot enforces.
+    """
+    chosen = _default_models(_kept_models(models))
+    env = {f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL": _public_name(m["id"]) for family, m in chosen.items()}
+    limits = [limit for family in ("opus", "sonnet") if family in chosen if (limit := _prompt_limit(chosen[family]))]
+    if limits:
+        env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = str(min(max(min(limits), 100_000), ONE_MILLION))
+    return env
 
 
 def render_config(routes: list[Route]) -> str:

@@ -74,6 +74,7 @@ def test_claude_defaults_pick_newest_model_per_family() -> None:
         "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4.10",
         "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5.5",
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4.5",
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
     }
 
 
@@ -84,13 +85,21 @@ def test_claude_defaults_fall_back_to_another_claude_family() -> None:
         "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-haiku-4.5",
         "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-haiku-4.5",
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4.5",
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "128000",
     }
 
 
 def test_claude_defaults_without_claude_use_the_best_other_model() -> None:
     """A plan without any Claude model points every default at its versatile model."""
-    models = _by_id("gpt-6-luna", "gpt-5.4-nano", "claude-sonnet-5")
-    assert set(copilot_auth.claude_defaults(models).values()) == {"anthropic-gpt-5.4-nano"}
+    env = copilot_auth.claude_defaults(_by_id("gpt-6-luna", "gpt-5.4-nano", "claude-sonnet-5"))
+    assert {v for k, v in env.items() if k.startswith("ANTHROPIC_DEFAULT_")} == {"anthropic-gpt-5.4-nano"}
+    assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "272000"
+
+
+def test_auto_compact_window_stays_within_claude_code_range() -> None:
+    """A one million token prompt limit sets the window to Claude Code's 1M maximum."""
+    env = copilot_auth.claude_defaults(_by_id("claude-opus-4.8"))
+    assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "1000000"
 
 
 def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,3 +113,4 @@ def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: py
     assert "master_key: os.environ/LITELLM_MASTER_KEY" in config
     defaults = (tmp_path / "defaults.env").read_text().splitlines()
     assert "ANTHROPIC_DEFAULT_SONNET_MODEL=claude-sonnet-5.5" in defaults
+    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000" in defaults
