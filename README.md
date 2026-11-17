@@ -14,8 +14,11 @@ LiteLLM was compromised on PyPI twice in 2026:
 | `1.107.0` | 21 October 2026 | Credential stealer and backdoor, on PyPI and in the official Docker images for about two hours |
 
 This repository pins `litellm[proxy]==1.106.2` in `requirements.txt`. It was
-published before the October incident, LiteLLM named it as a safe pin after that
-incident, and OSV lists no advisory for it (checked 17 November 2026).
+published before the October incident. LiteLLM's post-incident guidance, as
+reported by The Register (linked below), was to pin 1.106.2 or another explicit
+version published before the incident. An OSV query for 1.106.2 on 17 November
+2026 returned no advisories, while the same query flags 1.82.8 and 1.107.0 as
+malicious (`MAL-2026-2144`).
 
 - **Never loosen the pin to a range.** A range would have installed `1.107.0`
   for anyone who ran the installer during those two hours.
@@ -23,7 +26,7 @@ incident, and OSV lists no advisory for it (checked 17 November 2026).
   public for at least a week with no reports. Check it first:
 
   ```bash
-  curl -s -X POST https://api.osv.dev/v1/query \
+  curl -s -X POST https://api.osv.dev/v1/query -H 'Content-Type: application/json' \
     -d '{"package":{"name":"litellm","ecosystem":"PyPI"},"version":"X.Y.Z"}'
   ```
 
@@ -37,9 +40,9 @@ incident, and OSV lists no advisory for it (checked 17 November 2026).
   virtualenv. To check an existing install, run
   `.venv/bin/pip show litellm | grep Version` and
   `find .venv -name 'litellm_init.pth'`.
-- The gateway runs with `LITELLM_MODE=PRODUCTION`. This stops LiteLLM from
-  loading a stray `.env` from a parent directory, such as `~/.env`, into the
-  gateway process.
+- The gateway runs with `LITELLM_MODE=PRODUCTION`. In its default `DEV` mode,
+  LiteLLM calls `load_dotenv()` at import, which picks up a `.env` from a
+  parent directory such as `~/.env` and loads it into the gateway process.
 
 Sources:
 [Snyk](https://snyk.io/blog/poisoned-security-scanner-backdooring-litellm/),
@@ -66,12 +69,15 @@ The first `cc-copilot` installs LiteLLM into a private virtualenv. It then opens
 your browser once for GitHub's device login: enter the code shown in
 `cc-copilot-logs` and approve. Later starts are silent.
 
-Requirements: `python3` 3.10 to 3.14, `git`, `curl` and `openssl`.
+Requirements: `python3` 3.10 to 3.14 (the range LiteLLM 1.106.2 supports), `git`,
+`curl` and `openssl`.
 
 ### What the installer does
 
 `setup.sh` adds one tagged block to your shell RC file: `~/.zshrc` when your
-login shell is zsh (the macOS default), otherwise `~/.bashrc`. The block holds:
+login shell is zsh (the macOS default), otherwise `~/.bashrc`. The block exports
+the gateway key and defines the `cc-copilot` and `cc-copilot-logs` shell
+functions, so every new terminal has these commands:
 
 | Name | What it does |
 |---|---|
@@ -84,7 +90,8 @@ login shell is zsh (the macOS default), otherwise `~/.bashrc`. The block holds:
 
 Re-running `setup.sh` replaces the block in place. It never duplicates the
 block, never touches the rest of the file, and writes through a symlinked RC
-file managed by a dotfiles tool. Options: `RC_FILE=~/.bashrc ./setup.sh` picks
+file managed by a dotfiles tool. If it finds a begin marker without its end
+marker, it stops without changing anything. Options: `RC_FILE=~/.bashrc ./setup.sh` picks
 the file, and `PORT=4100 ./setup.sh` moves the gateway to another port.
 
 The environment is per shell. Open a new terminal to use Claude Code normally
@@ -107,11 +114,14 @@ live `/models` metadata for your account and writes `config.yaml` and
 - **Context window:** Copilot enforces its own prompt limits, often far below a
   model's native window: `claude-sonnet-5` accepts 200k prompt tokens there.
   Claude Code cannot see those limits. It assumes 1M for Sonnet 5 and later,
-  Opus 4.7 and later, and any model id it does not recognize. `cc-copilot`
-  therefore sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to the smaller published
-  prompt limit of the Opus and Sonnet defaults, so sessions compact before
-  Copilot rejects them. A `[1m]` variant appears only for models whose Copilot
-  prompt limit is at least one million tokens.
+  Opus 4.7 and later, and any model id it does not recognize
+  ([Claude Code model configuration](https://code.claude.com/docs/en/model-config#correct-the-window-for-a-gateway-or-custom-model-id)).
+  `cc-copilot` therefore sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to the smaller
+  published prompt limit of the Opus and Sonnet defaults, kept within Claude
+  Code's 100k to 1M range, so sessions compact before Copilot rejects them. A
+  `[1m]` variant appears only for models whose Copilot prompt limit is at least
+  one million tokens. When Copilot publishes no prompt limit for a model, its
+  context window is used instead.
 - **Defaults:** the newest Opus, Sonnet and Haiku become
   `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` and
   `ANTHROPIC_DEFAULT_HAIKU_MODEL`. A plan without one of those families falls

@@ -41,4 +41,12 @@ for word in cc-copilot-logs --update --models; do
 done
 "$TARGET_SHELL" -c "source '$RC'; typeset -f cc-copilot-logs > /dev/null" || fail "cc-copilot-logs not defined"
 
+BROKEN="$HOME/broken_rc"
+printf 'export A=1\n# ===COPILOT-GATEWAY===\nexport B=2\n' > "$BROKEN"
+cp "$BROKEN" "$BROKEN.orig"
+if RC_FILE="$BROKEN" "$REPO/setup.sh" > /dev/null 2>&1; then
+  fail "setup.sh accepted an RC file with a begin marker and no end marker"
+fi
+cmp -s "$BROKEN" "$BROKEN.orig" || fail "setup.sh changed an RC file with unbalanced markers"
+
 echo "PASS [$TARGET_SHELL]: installer block, key, symlink and functions"
