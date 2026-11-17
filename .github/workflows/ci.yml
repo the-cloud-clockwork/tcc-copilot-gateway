@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Shellcheck
-        run: shellcheck run.sh setup.sh tests/*.sh
+        run: shellcheck setup.sh entrypoint.sh shell/cc-copilot.sh tests/*.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -48,9 +48,38 @@ jobs:
       - name: Model onboarding tests
         run: pip install pytest httpx && pytest -q tests
 
+  compose:
+    runs-on: ubuntu-latest
+    env:
+      COPILOT_TOKEN_DIR: /tmp/copilot-token
+    steps:
+      - uses: actions/checkout@v4
+      - name: Throwaway gateway key and SearXNG secret for this run
+        run: |
+          echo "LITELLM_MASTER_KEY=sk-$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "SEARXNG_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Compose file is valid
+        run: docker compose config --quiet
+      - name: Gateway image builds with pinned LiteLLM and its patches
+        run: docker compose build gateway
+      - name: SearXNG answers JSON searches
+        run: |
+          image="$(docker compose config --images | grep searxng)"
+          docker run -d --name searxng -p 127.0.0.1:8888:8080 -e SEARXNG_SECRET \
+            -v "$PWD/searxng/settings.yml:/etc/searxng/settings.yml:ro" "$image"
+          code=""
+          for _ in $(seq 1 30); do
+            code="$(curl -s -o /tmp/searx.json -w '%{http_code}' 'http://127.0.0.1:8888/search?q=litellm&format=json' || true)"
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          docker logs searxng | tail -20
+          test "$code" = 200
+          python3 -c 'import json; print(len(json.load(open("/tmp/searx.json"))["results"]), "results")'
+
   gate:
     name: Gate — Required
-    needs: [lint, installer, onboarding]
+    needs: [lint, installer, onboarding, compose]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -58,4 +87,5 @@ jobs:
         run: |
           [ "${{ needs.lint.result }}" = success ] &&
           [ "${{ needs.installer.result }}" = success ] &&
-          [ "${{ needs.onboarding.result }}" = success ]
+          [ "${{ needs.onboarding.result }}" = success ] &&
+          [ "${{ needs.compose.result }}" = success ]
