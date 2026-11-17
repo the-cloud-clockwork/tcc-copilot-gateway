@@ -33,10 +33,8 @@ else
   KEY_MSG="master key: preserved"
 fi
 
-BEGIN_COUNT="$(grep -cxF "$MARKER_BEGIN" "$RC_FILE" || true)"
-END_COUNT="$(grep -cxF "$MARKER_END" "$RC_FILE" || true)"
-if [[ "$BEGIN_COUNT" != "$END_COUNT" ]]; then
-  echo "setup.sh: $RC_FILE has $BEGIN_COUNT begin and $END_COUNT end COPILOT-GATEWAY markers. Fix them by hand; nothing was changed." >&2
+if ! awk -v b="$MARKER_BEGIN" -v e="$MARKER_END" '$0 == b {if (open) bad = 1; open = 1} $0 == e {if (!open) bad = 1; open = 0} END {exit (bad || open)}' "$RC_FILE"; then
+  echo "setup.sh: $RC_FILE has unbalanced or out-of-order COPILOT-GATEWAY markers. Fix them by hand; nothing was changed." >&2
   exit 1
 fi
 
