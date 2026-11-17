@@ -189,7 +189,7 @@ function cc-copilot() {
         && PORT="$COPILOT_GATEWAY_PORT" RC_FILE="$COPILOT_GATEWAY_RC" "$COPILOT_GATEWAY_DIR/setup.sh" \
         && . "$COPILOT_GATEWAY_DIR/shell/cc-copilot.sh" \
         && __cc_copilot_compose build \
-        && printf 'Updated. Run cc-copilot -d (or c-claude / c-codex) to restart on the new version.\n'
+        && printf 'Updated. Run cc-copilot -d to restart on the new version.\n'
       return
       ;;
     "") ;;
