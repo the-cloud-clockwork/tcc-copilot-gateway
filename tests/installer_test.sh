@@ -100,7 +100,7 @@ grep -q -- "base_url=\"http://localhost:$PORT/v1\"" <<< "$codex_line" || fail "c
 grep -q -- 'wire_api="responses"' <<< "$codex_line" || fail "c-codex does not use the responses wire API"
 grep -q -- 'model_provider=copilot-gateway' <<< "$codex_line" || fail "c-codex does not select the gateway provider"
 printf '%s\n' '  │  Code:  ABCD-1234                           │' \
-  '  │  URL :  https://github.com/login/device     │' > "$HOME/fake-logs.txt"
+  '  │  URL :  https://my-company.ghe.com/login/device│' > "$HOME/fake-logs.txt"
 detached_out="$(alias_run 'cc-copilot -d')"
 grep -q 'Code:  ABCD-1234' <<< "$detached_out" || fail "cc-copilot -d did not show the device code"
 grep -q 'COPILOT GATEWAY READY' <<< "$detached_out" || fail "cc-copilot -d did not print the ready banner"
@@ -108,7 +108,7 @@ for _ in 1 2 3 4 5; do
   [[ -f "$HOME/opened-url" ]] && break
   sleep 1
 done
-[[ "$(cat "$HOME/opened-url" 2> /dev/null)" == "https://github.com/login/device" ]] \
+[[ "$(cat "$HOME/opened-url" 2> /dev/null)" == "https://my-company.ghe.com/login/device" ]] \
   || fail "cc-copilot -d did not open the device login page"
 kill "$fake"
 wait "$fake" 2> /dev/null || true

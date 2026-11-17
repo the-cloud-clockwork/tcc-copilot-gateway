@@ -84,7 +84,7 @@ __cc_copilot_wait() {
         fi
       fi
       if [[ -z "$opened" ]]; then
-        url="$(printf '%s\n' "$logs" | sed -n 's/.*URL : *\(https:[^ ]*\).*/\1/p' | tail -1)"
+        url="$(printf '%s\n' "$logs" | grep 'URL :' | grep -oE 'https://[A-Za-z0-9._~:/?#@%=&+-]+' | tail -1)"
         if [[ -n "$url" ]]; then
           __cc_copilot_open "$url"
           opened=1
