@@ -10,8 +10,8 @@ compromises: read the
 ## Quick start
 
 Requirements: Docker (Docker Desktop on macOS and Windows, Docker Engine on
-Linux), `git`, `curl` and `openssl`. Works on Linux, WSL and macOS, in bash
-and zsh.
+Linux), `git`, `curl`, `openssl`, and Claude Code (`claude`) or Codex
+(`codex`). Works on Linux, WSL and macOS, in bash and zsh.
 
 1. Install once per machine. `setup.sh` starts nothing: it creates the
    gateway key and adds the commands below to every new terminal.
@@ -32,13 +32,14 @@ Each time you run `c-claude` or `c-codex`, it checks the gateway first:
 
 | Gateway | What happens |
 |---|---|
-| Not running | Starts it in the background, shows its log until it is ready, then opens the tool. The first start builds the image (a few minutes) and opens your browser once for GitHub's device login: enter the code shown in the terminal and approve. |
+| Not running | Starts it in the background, shows its log until it is ready, then opens the tool. The first start builds the image (a few minutes) and opens your browser once for GitHub's device login: enter the code shown in the terminal and approve. Later starts take seconds. |
 | Starting | Waits until it answers, then opens the tool. |
 | Running | Opens the tool straight away. |
 
-The gateway keeps running after you quit Claude Code or Codex, serves every
-terminal at once, and comes back with Docker after a reboot. Stop it with
-`cc-copilot --stop`.
+The gateway keeps running after you quit Claude Code or Codex and serves every
+terminal at once until you stop it with `cc-copilot --stop`. When Docker starts
+after a reboot, the gateway starts with it, unless you had stopped it
+(`cc-copilot --stop`, or Ctrl-C in `cc-copilot`).
 
 `cc-copilot` is optional. Run it to watch the gateway's log in a terminal of
 its own, for example during the first login or while debugging. Ctrl-C in that
