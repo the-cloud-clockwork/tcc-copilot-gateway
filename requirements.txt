@@ -1,0 +1,4 @@
+# Current stable LiteLLM proxy. Exclude 1.82.7/1.82.8 (March 2026 supply-chain
+# incident — pulled from PyPI). Floating, not SHA-pinned: let pip resolve latest.
+litellm[proxy]!=1.82.7,!=1.82.8
+openai
