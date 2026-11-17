@@ -24,12 +24,18 @@ RC="$HOME/.${TARGET_SHELL}rc"
 printf 'export KEEP_BEFORE=1\n' > "$REAL_RC"
 ln -s "$REAL_RC" "$RC"
 
+SECRETS="$HOME/.config/tcc-copilot-gateway/secrets.env"
 RC_FILE="$RC" "$REPO/setup.sh" > /dev/null
 printf 'export KEEP_AFTER=1\n' >> "$RC"
-first_key="$(grep -oE 'LITELLM_MASTER_KEY="[^"]+"' "$RC")"
+first_key="$(grep -oE 'LITELLM_MASTER_KEY="[^"]+"' "$SECRETS")"
 
 RC_FILE="$RC" "$REPO/setup.sh" > /dev/null
-second_key="$(grep -oE 'LITELLM_MASTER_KEY="[^"]+"' "$RC")"
+second_key="$(grep -oE 'LITELLM_MASTER_KEY="[^"]+"' "$SECRETS")"
+mode="$(stat -c %a "$SECRETS" 2> /dev/null || stat -f %Lp "$SECRETS")"
+[[ "$mode" == 600 ]] || fail "secrets file mode is $mode, expected 600"
+if grep -qE 'LITELLM_MASTER_KEY=|SEARXNG_SECRET=' "$RC"; then
+  fail "the RC file holds a secret value"
+fi
 
 [[ -L "$RC" ]] || fail "RC symlink was replaced by a regular file"
 [[ "$(grep -c '^# ===COPILOT-GATEWAY===$' "$RC")" == 1 ]] || fail "expected exactly one begin marker"
@@ -60,10 +66,15 @@ cat > "$HOME/bin/docker" <<'FAKE'
 #!/bin/sh
 case "$*" in
   *"ps --status running --quiet gateway"*) [ -f "$HOME/.fake-gateway" ] && echo fake-gateway ;;
+  *" logs "*) cat "$HOME/fake-logs.txt" 2> /dev/null ;;
 esac
 exit 0
 FAKE
-chmod +x "$HOME/bin/claude" "$HOME/bin/codex" "$HOME/bin/docker"
+cat > "$HOME/bin/wslview" <<'FAKE'
+#!/bin/sh
+echo "$1" > "$HOME/opened-url"
+FAKE
+chmod +x "$HOME/bin/claude" "$HOME/bin/codex" "$HOME/bin/docker" "$HOME/bin/wslview"
 alias_run() {
   PATH="$HOME/bin:$PATH" "$TARGET_SHELL" -c "unset ANTHROPIC_BASE_URL; source '$RC'; $1" 2> /dev/null
 }
@@ -88,6 +99,17 @@ fi
 grep -q -- "base_url=\"http://localhost:$PORT/v1\"" <<< "$codex_line" || fail "c-codex did not point at the gateway: $codex_line"
 grep -q -- 'wire_api="responses"' <<< "$codex_line" || fail "c-codex does not use the responses wire API"
 grep -q -- 'model_provider=copilot-gateway' <<< "$codex_line" || fail "c-codex does not select the gateway provider"
+printf '%s\n' '  │  Code:  ABCD-1234                           │' \
+  '  │  URL :  https://github.com/login/device     │' > "$HOME/fake-logs.txt"
+detached_out="$(alias_run 'cc-copilot -d')"
+grep -q 'Code:  ABCD-1234' <<< "$detached_out" || fail "cc-copilot -d did not show the device code"
+grep -q 'COPILOT GATEWAY READY' <<< "$detached_out" || fail "cc-copilot -d did not print the ready banner"
+for _ in 1 2 3 4 5; do
+  [[ -f "$HOME/opened-url" ]] && break
+  sleep 1
+done
+[[ "$(cat "$HOME/opened-url" 2> /dev/null)" == "https://github.com/login/device" ]] \
+  || fail "cc-copilot -d did not open the device login page"
 kill "$fake"
 wait "$fake" 2> /dev/null || true
 rm -f "$HOME/.fake-gateway"

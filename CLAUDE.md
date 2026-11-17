@@ -23,12 +23,14 @@ compose job that builds the image and checks SearXNG answers JSON).
 
 ## How a start works
 
-`c-claude`, `c-codex` or `cc-copilot` run `docker compose up --build` (detached
-for the first two). The container entrypoint (`entrypoint.sh`):
+`cc-copilot` runs `docker compose up --build`, attached or with `-d` detached.
+`c-claude` and `c-codex` run the detached start only when the gateway is not
+running, and wait for it when it is starting. The container entrypoint
+(`entrypoint.sh`):
 
 1. Runs `copilot_auth.py`: reuses the cached GitHub token if it can list models,
-   otherwise runs the GitHub device flow (the code appears in the log; the host
-   shell opens the browser).
+   otherwise runs the GitHub device flow. The code appears in the log, and the
+   host shell opens the verification URL it finds there (github.com or GHE).
 2. Writes `state/config.yaml` and `state/defaults.env` from the live `/models`
    metadata.
 3. Execs `litellm --config /state/config.yaml` with `LITELLM_MODE=PRODUCTION`.
@@ -41,7 +43,7 @@ The host functions read `state/defaults.env` for Claude Code's
 
 | File | Role |
 |---|---|
-| `setup.sh` | Writes the COPILOT-GATEWAY RC block (key, SearXNG secret, paths, port) that sources `shell/cc-copilot.sh`. Idempotent by replace; refuses unbalanced markers. |
+| `setup.sh` | Keeps the key and SearXNG secret in `~/.config/tcc-copilot-gateway/secrets.env` (0600) and writes the COPILOT-GATEWAY RC block that loads it, exports paths and port, and sources `shell/cc-copilot.sh`. Idempotent by replace; refuses unbalanced markers. |
 | `shell/cc-copilot.sh` | `c-claude`, `c-codex`, `cc-copilot` (attached, `-d`, `--stop`, `--models`, `--update`, `--help`), `cc-copilot-logs`. bash and zsh. |
 | `compose.yaml`, `Dockerfile`, `entrypoint.sh`, `.dockerignore` | The stack. |
 | `copilot_auth.py` | Token check, device flow, model onboarding, config and defaults rendering. |
@@ -63,8 +65,9 @@ falling back to another Claude family, then the best non-Claude model.
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW` = the smaller `max_prompt_tokens` of the Opus
 and Sonnet defaults (clamped to 100k..1M). Codex default: highest picker
 category among `/responses` models, codex models first, then newest version.
-Copilot Free (`sku: free_limited_copilot`) lists models it then refuses with
-`model_not_supported`; only its base models answer.
+Observed on 2026-11-17 with a Copilot Free account (`sku: free_limited_copilot`):
+Copilot lists models it then refuses with `model_not_supported`; only the base
+models answered. The code has no plan-specific handling.
 
 ## Patches
 

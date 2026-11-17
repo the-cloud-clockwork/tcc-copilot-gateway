@@ -24,17 +24,27 @@ if [[ -z "${RC_FILE:-}" ]]; then
 fi
 touch "$RC_FILE"
 
-KEY="$(grep -oE 'LITELLM_MASTER_KEY="[^"]+"' "$RC_FILE" 2>/dev/null | head -1 | sed -E 's/.*="([^"]+)"/\1/' || true)"
+SECRETS_DIR="$HOME/.config/tcc-copilot-gateway"
+SECRETS_FILE="$SECRETS_DIR/secrets.env"
+
+read_secret() {
+  grep -ohE "$1=\"[^\"]+\"" "$SECRETS_FILE" "$RC_FILE" 2>/dev/null | head -1 | sed -E 's/.*="([^"]+)"/\1/' || true
+}
+
+KEY="$(read_secret LITELLM_MASTER_KEY)"
 if [[ -z "$KEY" ]]; then
   KEY="sk-$(openssl rand -hex 24)"
   KEY_MSG="master key: generated"
 else
   KEY_MSG="master key: preserved"
 fi
-SECRET="$(grep -oE 'SEARXNG_SECRET="[^"]+"' "$RC_FILE" 2>/dev/null | head -1 | sed -E 's/.*="([^"]+)"/\1/' || true)"
+SECRET="$(read_secret SEARXNG_SECRET)"
 if [[ -z "$SECRET" ]]; then
   SECRET="$(openssl rand -hex 32)"
 fi
+mkdir -p "$SECRETS_DIR"
+(umask 077 && printf 'export LITELLM_MASTER_KEY="%s"\nexport SEARXNG_SECRET="%s"\n' "$KEY" "$SECRET" > "$SECRETS_FILE")
+chmod 600 "$SECRETS_FILE"
 TOKEN_DIR="${GITHUB_COPILOT_TOKEN_DIR:-$HOME/.config/litellm/github_copilot}"
 
 if ! awk -v b="$MARKER_BEGIN" -v e="$MARKER_END" '$0 == b {if (open) bad = 1; open = 1} $0 == e {if (!open) bad = 1; open = 0} END {exit (bad || open)}' "$RC_FILE"; then
@@ -48,8 +58,7 @@ printf '%s\n' "$KEPT" > "$RC_FILE"
 cat >> "$RC_FILE" <<EOF
 
 $MARKER_BEGIN
-export LITELLM_MASTER_KEY="$KEY"
-export SEARXNG_SECRET="$SECRET"
+[ -f "$SECRETS_FILE" ] && . "$SECRETS_FILE"
 export COPILOT_GATEWAY_DIR="$REPO_DIR"
 export COPILOT_GATEWAY_PORT="$PORT"
 export COPILOT_GATEWAY_RC="$RC_FILE"

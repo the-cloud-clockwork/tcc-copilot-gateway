@@ -1,9 +1,9 @@
 # shellcheck shell=bash
 # c-claude, c-codex and cc-copilot for bash and zsh on Linux, WSL and macOS.
 # The COPILOT-GATEWAY block that setup.sh writes into ~/.bashrc or ~/.zshrc
-# exports LITELLM_MASTER_KEY, SEARXNG_SECRET, COPILOT_GATEWAY_DIR,
-# COPILOT_GATEWAY_PORT, COPILOT_GATEWAY_RC and COPILOT_TOKEN_DIR, then sources
-# this file, so a git pull updates these functions.
+# sources the 0600 secrets file (LITELLM_MASTER_KEY, SEARXNG_SECRET), exports
+# COPILOT_GATEWAY_DIR, COPILOT_GATEWAY_PORT, COPILOT_GATEWAY_RC and
+# COPILOT_TOKEN_DIR, then sources this file, so a git pull updates it.
 
 __cc_copilot_url() {
   printf 'http://localhost:%s' "${COPILOT_GATEWAY_PORT:-4000}"
@@ -19,8 +19,8 @@ __cc_copilot_running() {
 
 __cc_copilot_ready() {
   local code
-  code="$(curl -s -o /dev/null -w '%{http_code}' "$(__cc_copilot_url)/v1/models" \
-    -H "Authorization: Bearer $LITELLM_MASTER_KEY" 2> /dev/null)"
+  code="$(printf 'Authorization: Bearer %s\n' "$LITELLM_MASTER_KEY" \
+    | curl -s -o /dev/null -w '%{http_code}' -H @- "$(__cc_copilot_url)/v1/models" 2> /dev/null)"
   [[ "$code" == "200" ]]
 }
 
@@ -65,19 +65,30 @@ __cc_copilot_banner() {
   printf '%s%s\n\n' "$rule" "$reset"
 }
 
+__cc_copilot_started_at() {
+  local id
+  id="$(__cc_copilot_compose ps --quiet gateway 2> /dev/null)"
+  [[ -n "$id" ]] && docker inspect --format '{{.State.StartedAt}}' "$id" 2> /dev/null
+}
+
 __cc_copilot_wait() {
-  local mode="$1" since="${2:-}" shown=0 total=0 i=0 logs="" opened=""
+  local mode="$1" since="${2:-}" shown=0 total=0 i=0 logs="" url="" opened=""
   while (( i < 1800 )); do
     if [[ -n "$since" ]]; then
       logs="$(__cc_copilot_compose logs --no-color --no-log-prefix --since "$since" gateway 2> /dev/null)"
-      total="$(printf '%s\n' "$logs" | wc -l | tr -d ' ')"
-      if (( total > shown )); then
-        printf '%s\n' "$logs" | sed -n "$((shown + 1)),${total}p"
-        shown="$total"
+      if [[ "$mode" != attached && -n "$logs" ]]; then
+        total="$(printf '%s\n' "$logs" | wc -l | tr -d ' ')"
+        if (( total > shown )); then
+          printf '%s\n' "$logs" | sed -n "$((shown + 1)),${total}p"
+          shown="$total"
+        fi
       fi
-      if [[ -z "$opened" && "$logs" == *"github.com/login/device"* ]]; then
-        __cc_copilot_open "https://github.com/login/device"
-        opened=1
+      if [[ -z "$opened" ]]; then
+        url="$(printf '%s\n' "$logs" | sed -n 's/.*URL : *\(https:[^ ]*\).*/\1/p' | tail -1)"
+        if [[ -n "$url" ]]; then
+          __cc_copilot_open "$url"
+          opened=1
+        fi
       fi
     fi
     if __cc_copilot_ready; then
@@ -125,7 +136,7 @@ __cc_copilot_ensure() {
   fi
   if __cc_copilot_running; then
     printf 'Waiting for the Copilot gateway at %s ...\n' "$(__cc_copilot_url)" >&2
-    __cc_copilot_wait quiet >&2
+    __cc_copilot_wait quiet "$(__cc_copilot_started_at)" >&2
     return
   fi
   printf 'Starting the Copilot gateway in the background ...\n' >&2
@@ -168,7 +179,8 @@ function cc-copilot() {
     --stop) __cc_copilot_stop; return ;;
     -d|--detached) __cc_copilot_start_detached; return ;;
     --models)
-      curl -s "$(__cc_copilot_url)/v1/models" -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+      printf 'Authorization: Bearer %s\n' "$LITELLM_MASTER_KEY" \
+        | curl -s -H @- "$(__cc_copilot_url)/v1/models" \
         | grep -oE '"id": ?"[^"]+"' | sed -E 's/.*"([^"]+)"$/\1/'
       return
       ;;
@@ -184,7 +196,9 @@ function cc-copilot() {
     *) printf 'cc-copilot: unknown option %s (see cc-copilot --help)\n' "$1" >&2; return 2 ;;
   esac
   __cc_copilot_prepare || return
-  (__cc_copilot_wait attached &)
+  local since
+  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  (__cc_copilot_wait attached "$since" &)
   __cc_copilot_compose up --build
 }
 

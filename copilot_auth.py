@@ -378,10 +378,15 @@ def render_config(routes: list[Route]) -> str:
     return "\n".join(lines)
 
 
+def tool_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
+    """Every default the host shell exports for Claude Code and Codex."""
+    return {**claude_defaults(models), **codex_defaults(models)}
+
+
 def write_config(models: list[dict[str, Any]]) -> None:
-    """Write config.yaml with every route and defaults.env with Claude Code's default models."""
+    """Write config.yaml with every route and defaults.env with the Claude Code and Codex defaults."""
     CONFIG_FILE.write_text(render_config(plan_routes(models)))
-    defaults = {**claude_defaults(models), **codex_defaults(models)}
+    defaults = tool_defaults(models)
     DEFAULTS_FILE.write_text("".join(f"{key}={value}\n" for key, value in defaults.items()))
 
 
@@ -389,7 +394,7 @@ def _report(models: list[dict[str, Any]]) -> None:
     """Log what the gateway will expose and which defaults Claude Code gets."""
     kept = _kept_models(models)
     _log(f"  exposing {len(kept)} of {len(models)} models: {', '.join(m['id'] for m in kept)}")
-    for key, value in {**claude_defaults(models), **codex_defaults(models)}.items():
+    for key, value in tool_defaults(models).items():
         _log(f"  {key}={value}")
 
 

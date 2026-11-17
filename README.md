@@ -73,10 +73,11 @@ the code shown in the terminal and approve. Later starts take seconds.
 ### What the installer does
 
 `setup.sh` adds one tagged block to your shell RC file: `~/.zshrc` when your
-login shell is zsh (the macOS default), otherwise `~/.bashrc`. The block exports
-the gateway key, a SearXNG secret, the repository path and the port, then
-sources `shell/cc-copilot.sh`, which defines these shell functions in every new
-terminal:
+login shell is zsh (the macOS default), otherwise `~/.bashrc`. The gateway key
+and a SearXNG secret live in `~/.config/tcc-copilot-gateway/secrets.env`
+(mode 600), never in the RC file. The block loads that file, exports the
+repository path and the port, then sources `shell/cc-copilot.sh`, which defines
+these shell functions in every new terminal:
 
 | Command | What it does |
 |---|---|
