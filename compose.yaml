@@ -1,0 +1,32 @@
+name: tcc-copilot-gateway
+
+services:
+  gateway:
+    build: .
+    image: tcc-copilot-gateway:local
+    user: "${COPILOT_UID:-1000}:${COPILOT_GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?run setup.sh, then open a new terminal}
+      GITHUB_COPILOT_TOKEN_DIR: /copilot-token
+      COPILOT_STATE_DIR: /state
+      SEARXNG_API_BASE: http://searxng:8080
+      HOME: /tmp
+    volumes:
+      - ${COPILOT_TOKEN_DIR:?run setup.sh, then open a new terminal}:/copilot-token
+      - ./state:/state
+    ports:
+      - "127.0.0.1:${COPILOT_GATEWAY_PORT:-4000}:4000"
+    depends_on:
+      - searxng
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:2026.11.2-d138f443b
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?run setup.sh, then open a new terminal}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped

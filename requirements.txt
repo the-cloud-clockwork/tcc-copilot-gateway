@@ -1,2 +1,2 @@
 litellm[proxy]==1.106.2
-openai
+openai==2.54.0

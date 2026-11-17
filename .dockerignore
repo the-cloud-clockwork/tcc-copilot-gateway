@@ -1,0 +1,5 @@
+*
+!requirements.txt
+!litellm_patches.py
+!copilot_auth.py
+!entrypoint.sh
