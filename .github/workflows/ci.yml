@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck
+        run: shellcheck run.sh setup.sh tests/*.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ruff
+        run: pip install ruff && ruff check .
+
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        shell: [bash, zsh]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install zsh
+        if: runner.os == 'Linux' && matrix.shell == 'zsh'
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - name: Installer test
+        run: tests/installer_test.sh ${{ matrix.shell }}
+
+  onboarding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Model onboarding tests
+        run: pip install pytest httpx && pytest -q tests
+
+  gate:
+    name: Gate — Required
+    needs: [lint, installer, onboarding]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All gates green
+        run: |
+          [ "${{ needs.lint.result }}" = success ] &&
+          [ "${{ needs.installer.result }}" = success ] &&
+          [ "${{ needs.onboarding.result }}" = success ]
