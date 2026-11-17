@@ -3,16 +3,49 @@
 Run Claude Code and Codex on your GitHub Copilot models. A local LiteLLM
 gateway listens on `http://localhost:4000` and routes every request to your
 Copilot subscription. A private SearXNG answers Claude Code's web searches.
-Both run in Docker.
+Both run in Docker. LiteLLM is pinned to 1.106.2 because of the 2026 PyPI
+compromises: read the
+[supply-chain notice](#supply-chain-notice-litellm-is-pinned-to-11062).
 
-```bash
-c-claude        # Claude Code on Copilot
-c-codex         # Codex on Copilot
-```
+## Quick start
 
-That is all you type day to day. Either command starts the gateway in the
-background when it is not running, shows its log while it starts, then opens
-the tool with the gateway's key and your plan's best models.
+Requirements: Docker (Docker Desktop on macOS and Windows, Docker Engine on
+Linux), `git`, `curl` and `openssl`. Works on Linux, WSL and macOS, in bash
+and zsh.
+
+1. Install once per machine. `setup.sh` starts nothing: it creates the
+   gateway key and adds the commands below to every new terminal.
+
+   ```bash
+   git clone https://github.com/the-cloud-clockwork/tcc-copilot-gateway.git ~/tcc-copilot-gateway
+   cd ~/tcc-copilot-gateway && ./setup.sh
+   ```
+
+2. Open a new terminal and run one of these. That is all you type day to day.
+
+   ```bash
+   c-claude        # Claude Code on Copilot
+   c-codex         # Codex on Copilot
+   ```
+
+Each time you run `c-claude` or `c-codex`, it checks the gateway first:
+
+| Gateway | What happens |
+|---|---|
+| Not running | Starts it in the background, shows its log until it is ready, then opens the tool. The first start builds the image (a few minutes) and opens your browser once for GitHub's device login: enter the code shown in the terminal and approve. |
+| Starting | Waits until it answers, then opens the tool. |
+| Running | Opens the tool straight away. |
+
+The gateway keeps running after you quit Claude Code or Codex, serves every
+terminal at once, and comes back with Docker after a reboot. Stop it with
+`cc-copilot --stop`.
+
+`cc-copilot` is optional. Run it to watch the gateway's log in a terminal of
+its own, for example during the first login or while debugging. Ctrl-C in that
+terminal stops the gateway for every terminal, so keep it open while you work.
+
+To update: `cc-copilot --update`, then `cc-copilot -d` to restart the gateway
+on the new version.
 
 ## Supply-chain notice: LiteLLM is pinned to 1.106.2
 
@@ -56,21 +89,7 @@ Sources:
 [Datadog Security Labs](https://securitylabs.datadoghq.com/articles/litellm-compromised-pypi-docker/),
 [The Register](https://www.theregister.com/security/2026/10/26/litellm-supply-chain-attack-started-with-an-exposed-master-key/5305544).
 
-## Install (Linux, WSL, macOS)
-
-Requirements: Docker (Docker Desktop on macOS and Windows, Docker Engine on
-Linux), `git`, `curl` and `openssl`.
-
-```bash
-git clone https://github.com/the-cloud-clockwork/tcc-copilot-gateway.git ~/tcc-copilot-gateway
-cd ~/tcc-copilot-gateway && ./setup.sh
-```
-
-Open a new terminal, then run `c-claude` or `c-codex`. The first start builds
-the gateway image and opens your browser once for GitHub's device login: enter
-the code shown in the terminal and approve. Later starts take seconds.
-
-### What the installer does
+## What the installer does
 
 `setup.sh` adds one tagged block to your shell RC file: `~/.zshrc` when your
 login shell is zsh (the macOS default), otherwise `~/.bashrc`. The gateway key
@@ -83,11 +102,11 @@ these shell functions in every new terminal:
 |---|---|
 | `c-claude [args]` | Claude Code on Copilot: the gateway URL, the key, gateway model discovery, the newest Opus, Sonnet and Haiku your plan offers, and the right auto-compact window. |
 | `c-codex [args]` | Codex on Copilot: a `copilot-gateway` provider on the Responses API, the gateway's model catalog, and the best Responses model your plan offers. |
-| `cc-copilot` | Starts the gateway in this terminal and shows its log. When it is ready a green banner says to keep the terminal open and use `c-claude` or `c-codex` in a new one. Ctrl-C stops it. |
+| `cc-copilot` | Starts the gateway in this terminal and shows its log. When it is ready a green banner says to keep the terminal open and use `c-claude` or `c-codex` in a new one. Ctrl-C stops it for every terminal. |
 | `cc-copilot -d` | The same in the background (`--detached`): shows the log until it is ready, then returns. |
 | `cc-copilot --stop` | Stops the gateway. |
 | `cc-copilot --models` | Lists the models the gateway serves right now. |
-| `cc-copilot --update` | Pulls this repository, rewrites the RC block and rebuilds the image. |
+| `cc-copilot --update` | Pulls this repository, rewrites the RC block and rebuilds the image. Run `cc-copilot -d` afterwards to restart the gateway on it. |
 | `cc-copilot-logs` | Follows the gateway log from any terminal. |
 
 Plain `claude` and `codex` are never changed. Your own `~/.codex/config.toml`
@@ -99,9 +118,6 @@ and writes through a symlinked RC file managed by a dotfiles tool. If it finds a
 begin marker without its end marker, it stops without changing anything.
 Options: `RC_FILE=~/.bashrc ./setup.sh` picks the file, and `PORT=4100
 ./setup.sh` moves the gateway to another port.
-
-The containers restart with Docker, so after a reboot the gateway is usually
-already running when you type `c-claude`.
 
 ## Automatic model onboarding
 
