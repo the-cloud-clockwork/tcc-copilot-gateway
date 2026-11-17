@@ -28,11 +28,19 @@ PORT="${PORT:-4000}"
 # cause of LiteLLM's misleading "No connected db" (== wrong master key) errors.
 pkill -f "litellm .*--port ${PORT}" 2>/dev/null || true
 pkill -f "litellm --config"        2>/dev/null || true
+
+port_pid() {
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -t -iTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null | head -1
+  else
+    ss -ltnp 2>/dev/null | grep ":${PORT} " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
+  fi
+}
+
 for _ in 1 2 3 4 5; do
-  ss -ltn 2>/dev/null | grep -q ":${PORT} " || break
-  command -v fuser >/dev/null 2>&1 && fuser -k "${PORT}/tcp" 2>/dev/null || true
-  pid="$(ss -ltnp 2>/dev/null | grep ":${PORT} " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
-  [[ -n "$pid" ]] && kill -9 "$pid" 2>/dev/null || true
+  pid="$(port_pid || true)"
+  [[ -n "$pid" ]] || break
+  kill -9 "$pid" 2>/dev/null || true
   sleep 1
 done
 
@@ -56,13 +64,17 @@ if [[ -z "${LITELLM_MASTER_KEY:-}" ]]; then
   echo "    $LITELLM_MASTER_KEY"
 fi
 
-# Bootstrap venv + deps on first run.
-if [[ ! -x .venv/bin/litellm ]]; then
-  echo "First run — setting up virtualenv..."
+REQ_STAMP=".venv/.requirements.cksum"
+REQ_SUM="$(cksum < requirements.txt)"
+if [[ ! -x .venv/bin/litellm || "$(cat "$REQ_STAMP" 2>/dev/null || true)" != "$REQ_SUM" ]]; then
+  echo "Installing the pinned dependencies into a fresh virtualenv..."
+  rm -rf .venv
   python3 -m venv .venv
   .venv/bin/pip install --quiet --upgrade pip
   .venv/bin/pip install --quiet -r requirements.txt
+  printf '%s\n' "$REQ_SUM" > "$REQ_STAMP"
 fi
+echo "LiteLLM $(.venv/bin/python -c 'import importlib.metadata as m; print(m.version("litellm"))')"
 
 # Auth + sanity check + regenerate config. Only refreshes the token on failure.
 .venv/bin/python copilot_auth.py
@@ -76,5 +88,5 @@ echo ""
 # exec => the gateway takes over this PID, so killing the script kills the gateway.
 # env -u strips any inherited DATABASE_URL etc. — this is a stateless gateway,
 # no DB, no prisma, no UI backend.
-exec env -u DATABASE_URL -u STORE_MODEL_IN_DB -u LITELLM_DATABASE_URL \
+exec env -u DATABASE_URL -u STORE_MODEL_IN_DB -u LITELLM_DATABASE_URL LITELLM_MODE=PRODUCTION \
   .venv/bin/litellm --config ./config.yaml --port "$PORT"

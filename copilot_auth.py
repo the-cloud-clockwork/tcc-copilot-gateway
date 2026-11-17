@@ -1,12 +1,11 @@
-"""Ensure a working GitHub Copilot token, then (re)generate the LiteLLM config.
+"""Ensure a working GitHub Copilot token, then regenerate the LiteLLM config.
 
-Design goals (operator intent):
-- Refresh the GitHub token ONLY when it can't fetch the Copilot model list.
-  A valid token + subscription => no device flow, no refresh, just proceed.
+- Refresh the GitHub token only when it cannot fetch the Copilot model list.
 - On failure, run the device flow and open the browser automatically.
-- Write the token in the exact files LiteLLM reads (access-token / api-key.json),
-  so LiteLLM reuses them and never re-auths on its own.
-- Regenerate config.yaml from the live subscription so exposed models never drift.
+- Write the token to the files LiteLLM reads (access-token, api-key.json).
+- Build config.yaml and defaults.env from the live /models metadata on every
+  start: which models this plan can call, which serve the Responses API, which
+  accept a one million token prompt, and the newest Claude model per family.
 
 Run by run.sh; not meant to be called directly.
 """
@@ -20,11 +19,12 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-import httpx  # shipped with litellm
+import httpx
 
-# Public GitHub Copilot OAuth client id (same one every Copilot client uses).
 CLIENT_ID = os.getenv("GITHUB_COPILOT_CLIENT_ID", "Iv1.b507a08c87ecfe98")
 DEVICE_CODE_URL = os.getenv("GITHUB_COPILOT_DEVICE_CODE_URL", "https://github.com/login/device/code")
 ACCESS_TOKEN_URL = os.getenv("GITHUB_COPILOT_ACCESS_TOKEN_URL", "https://github.com/login/oauth/access_token")
@@ -37,6 +37,7 @@ TOKEN_DIR = Path(
 ACCESS_TOKEN_FILE = TOKEN_DIR / "access-token"
 API_KEY_FILE = TOKEN_DIR / "api-key.json"
 CONFIG_FILE = Path(__file__).with_name("config.yaml")
+DEFAULTS_FILE = Path(__file__).with_name("defaults.env")
 
 COPILOT_HEADERS = {
     "editor-version": "vscode/1.85.1",
@@ -45,6 +46,37 @@ COPILOT_HEADERS = {
     "user-agent": "GithubCopilot/1.155.0",
     "accept": "application/json",
 }
+MODELS_HEADERS = {
+    "copilot-integration-id": "vscode-chat",
+    "editor-version": "vscode/1.95.0",
+    "editor-plugin-version": "copilot-chat/0.26.7",
+    "user-agent": "GitHubCopilotChat/0.26.7",
+    "openai-intent": "conversation-panel",
+    "x-github-api-version": "2025-04-01",
+    "accept": "application/json",
+}
+
+ONE_MILLION = 1_000_000
+MIN_CLAUDE_VERSION = (4, 6)
+_DENY_SUBSTR = ("embedding", "trajectory", "picker", "mai-code")
+_DATED = re.compile(r"-(\d{4}-\d{2}-\d{2}|\d{4})(-preview)?$")
+_CLAUDE_TIER = re.compile(r"claude-(?:opus|sonnet)-(\d+(?:\.\d+)*)")
+_CLAUDE_FAMILY = re.compile(r"^claude-(opus|sonnet|haiku)-(\d+(?:\.\d+)*)$")
+_FAMILY_ORDER = {
+    "opus": ("opus", "sonnet", "haiku"),
+    "sonnet": ("sonnet", "opus", "haiku"),
+    "haiku": ("haiku", "sonnet", "opus"),
+}
+_CATEGORY_ORDER = ("versatile", "powerful", "lightweight")
+
+
+@dataclass(frozen=True)
+class Route:
+    """One LiteLLM model_list entry: the public model name, its Copilot target and whether it uses /responses."""
+
+    name: str
+    target: str
+    responses: bool
 
 
 def _log(msg: str) -> None:
@@ -67,40 +99,41 @@ def exchange_api_key(access_token: str) -> dict:
     return resp.json()
 
 
-def list_models(api_token: str, api_base: str) -> list[str]:
-    headers = {**COPILOT_HEADERS, "authorization": f"Bearer {api_token}"}
+def list_models(api_token: str, api_base: str) -> list[dict[str, Any]]:
+    """Fetch the Copilot /models entries for this token, metadata included, with LiteLLM's request headers."""
+    headers = {**MODELS_HEADERS, "authorization": f"Bearer {api_token}"}
     resp = httpx.get(f"{api_base.rstrip('/')}/models", headers=headers, timeout=30)
     resp.raise_for_status()
-    data = resp.json()
-    items = data.get("data", data if isinstance(data, list) else [])
-    ids = [m.get("id") for m in items if isinstance(m, dict) and m.get("id")]
-    return sorted(set(ids))
+    return [m for m in resp.json().get("data", []) if isinstance(m, dict) and m.get("id")]
 
 
-def sanity_check(access_token: str) -> tuple[bool, list[str], dict | None]:
-    """Return (ok, model_ids, api_key_info). ok=False means the token needs refresh."""
+def sanity_check(access_token: str) -> tuple[bool, list[dict[str, Any]], dict | None]:
+    """Return (ok, models, api_key_info). ok=False means the token needs refresh."""
     try:
         info = exchange_api_key(access_token)
         api_base = info.get("endpoints", {}).get("api", DEFAULT_API_BASE)
         models = list_models(info["token"], api_base)
         return (bool(models), models, info)
-    except Exception as e:  # noqa: BLE001 - any failure => refresh
+    except Exception as e:  # noqa: BLE001
         _log(f"  sanity check failed: {e}")
         return (False, [], None)
 
 
 def open_browser(url: str) -> None:
-    """Best-effort auto-open, WSL2-aware."""
-    for cmd in (
+    """Best-effort auto-open of the device login page on WSL, macOS and Linux desktops."""
+    candidates = [
         ["wslview", url],
         ["powershell.exe", "-NoProfile", "-Command", f"Start-Process '{url}'"],
         ["xdg-open", url],
-    ):
+    ]
+    if sys.platform == "darwin":
+        candidates.insert(0, ["open", url])
+    for cmd in candidates:
         if shutil.which(cmd[0]):
             try:
                 subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001, S112
                 continue
     _log(f"  (could not auto-open a browser — open it manually: {url})")
 
@@ -122,7 +155,7 @@ def device_flow() -> str:
 
     _log("")
     _log("  ┌─────────────────────────────────────────────┐")
-    _log(f"  │  Authorize GitHub Copilot                     │")
+    _log("  │  Authorize GitHub Copilot                     │")
     _log(f"  │  Code:  {user_code:<37}│")
     _log(f"  │  URL :  {verify_uri:<37}│")
     _log("  └─────────────────────────────────────────────┘")
@@ -161,73 +194,146 @@ def save_tokens(access_token: str, api_key_info: dict | None) -> None:
         API_KEY_FILE.chmod(0o600)
 
 
-MIN_CLAUDE_VERSION = 4.6  # drop opus/sonnet below this
-# Non-chat / utility / embedding models — not useful as completion models.
-_DENY_SUBSTR = ("embedding", "trajectory", "picker", "mai-code")
-# Dated snapshots (e.g. -2024-05-13, -0613, -0125-preview) — keep the floating alias.
-_DATED = re.compile(r"-(\d{4}-\d{2}-\d{2}|\d{4})(-preview)?$")
+def _version(text: str) -> tuple[int, ...]:
+    """Parse a dotted version such as 4.10 into a tuple that compares numerically."""
+    return tuple(int(part) for part in text.split("."))
 
 
-def _excluded(m: str) -> bool:
-    """Prune to a current, chat-capable set (see README 'Available models')."""
-    ml = m.lower()
-    if any(s in ml for s in _DENY_SUBSTR):          # embeddings, utilities
+def _excluded_by_name(model_id: str) -> bool:
+    """Name rules for entries that carry no picker metadata: drop utilities, snapshots and legacy tiers."""
+    ml = model_id.lower()
+    if any(s in ml for s in _DENY_SUBSTR) or _DATED.search(ml):
         return True
-    if _DATED.search(ml):                            # dated snapshots
+    tier = _CLAUDE_TIER.match(ml)
+    if tier and _version(tier.group(1)) < MIN_CLAUDE_VERSION:
         return True
-    cm = re.match(r"claude-(?:opus|sonnet)-(\d+(?:\.\d+)?)", ml)
-    if cm and float(cm.group(1)) < MIN_CLAUDE_VERSION:   # old Claude tiers
-        return True
-    if re.match(r"gpt-(3\.5|4)", ml):                # all pre-5 GPT (3.5, 4, 4.1, 4o, …) — keep only gpt-5*
-        return True
-    if ml.startswith("gemini-2"):                    # old Gemini (keep gemini-3*)
-        return True
-    return False
+    return bool(re.match(r"gpt-(3\.5|4)", ml)) or ml.startswith("gemini-2")
 
 
-def _has_1m(m: str) -> bool:
-    """Models with a 1M-token context window (web-verified July 2026)."""
-    ml = m.lower()
-    cm = re.match(r"claude-(?:opus|sonnet)-(\d+(?:\.\d+)?)", ml)
-    if cm and float(cm.group(1)) >= 4.6:             # opus/sonnet >=4.6 (haiku is 200k)
-        return True
-    if re.match(r"gpt-5\.\d+$", ml):                 # gpt-5.4, gpt-5.5 (minis/codex unconfirmed)
-        return True
-    if ml.startswith("gemini-3"):                    # gemini-3* = 1M
-        return True
-    return False
+def _keep(model: dict[str, Any]) -> bool:
+    """Whether a /models entry is a current chat model this plan can call."""
+    capabilities = model.get("capabilities")
+    if not isinstance(capabilities, dict):
+        return not _excluded_by_name(model["id"])
+    return (
+        capabilities.get("type") == "chat"
+        and model.get("model_picker_category") is not None
+        and (model.get("policy") or {}).get("state") != "disabled"
+    )
 
 
-def write_config(models: list[str]) -> None:
-    # Client-facing model_name, routed to the github_copilot/ provider underneath.
-    # Claude Code's /model gateway-discovery only lists ids starting with
-    # "claude" or "anthropic". Claude models already qualify (kept bare, e.g.
-    # claude-opus-4.8); every other model (gpt/gemini/etc.) is prefixed
-    # "anthropic-" so the WHOLE subscription shows in the picker. The prefix is
-    # just an alias label — litellm_params.model does the real routing.
+def _uses_responses(model: dict[str, Any]) -> bool:
+    """Whether the model serves the Responses API, from supported_endpoints or, without it, its name."""
+    endpoints = model.get("supported_endpoints")
+    if isinstance(endpoints, list):
+        return any(str(e).rstrip("/").endswith("/responses") for e in endpoints)
+    ml = model["id"].lower()
+    return "codex" in ml or ml.startswith("gpt-5")
+
+
+def _prompt_limit(model: dict[str, Any]) -> int | None:
+    """The model's published prompt limit in tokens, or its context window when no prompt limit is published."""
+    limits = (model.get("capabilities") or {}).get("limits") or {}
+    limit = limits.get("max_prompt_tokens", limits.get("max_context_window_tokens"))
+    return limit if isinstance(limit, int) else None
+
+
+def _accepts_one_million(model: dict[str, Any]) -> bool:
+    """Whether the model's published prompt limit reaches one million tokens; no published limit means no."""
+    limit = _prompt_limit(model)
+    return limit is not None and limit >= ONE_MILLION
+
+
+def _public_name(model_id: str) -> str:
+    """Name clients use: Claude ids stay bare, others get the anthropic- prefix Claude Code's picker lists."""
+    return model_id if model_id.startswith(("claude", "anthropic")) else f"anthropic-{model_id}"
+
+
+def _kept_models(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate a /models payload by id and keep the callable chat models, sorted by id."""
+    by_id = {m["id"]: m for m in models if m.get("id")}
+    return [by_id[model_id] for model_id in sorted(by_id) if _keep(by_id[model_id])]
+
+
+def plan_routes(models: list[dict[str, Any]]) -> list[Route]:
+    """Turn a /models payload into LiteLLM routes, adding a [1m] entry for models that accept a 1M token prompt."""
+    routes: list[Route] = []
+    for model in _kept_models(models):
+        base = _public_name(model["id"])
+        names = [base, f"{base}[1m]"] if _accepts_one_million(model) else [base]
+        responses = _uses_responses(model)
+        routes.extend(Route(name, f"github_copilot/{model['id']}", responses) for name in names)
+    return routes
+
+
+def _default_models(kept: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Map each Claude Code family (opus, sonnet, haiku) to the kept model that should back it."""
+    newest: dict[str, tuple[tuple[int, ...], dict[str, Any]]] = {}
+    for model in kept:
+        match = _CLAUDE_FAMILY.match(model["id"])
+        if match:
+            family, version = match.group(1), _version(match.group(2))
+            if family not in newest or version > newest[family][0]:
+                newest[family] = (version, model)
+    if newest:
+        return {family: next(newest[f][1] for f in order if f in newest) for family, order in _FAMILY_ORDER.items()}
+    if not kept:
+        return {}
+    ranked = sorted(
+        kept,
+        key=lambda m: _CATEGORY_ORDER.index(m["model_picker_category"])
+        if m.get("model_picker_category") in _CATEGORY_ORDER
+        else len(_CATEGORY_ORDER),
+    )
+    return dict.fromkeys(_FAMILY_ORDER, ranked[0])
+
+
+def claude_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
+    """Claude Code environment for this plan: the Opus, Sonnet and Haiku defaults and the auto-compact window.
+
+    Each family gets its newest kept model; a missing family falls back to another
+    Claude family, and a plan with no Claude model falls back to its first model by
+    picker category. The auto-compact window is the smaller published prompt limit
+    of the Opus and Sonnet defaults, kept within Claude Code's 100k to 1M range,
+    because Claude Code cannot see the lower limits Copilot enforces.
+    """
+    chosen = _default_models(_kept_models(models))
+    env = {f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL": _public_name(m["id"]) for family, m in chosen.items()}
+    limits = [limit for family in ("opus", "sonnet") if family in chosen if (limit := _prompt_limit(chosen[family]))]
+    if limits:
+        env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = str(min(max(min(limits), 100_000), ONE_MILLION))
+    return env
+
+
+def render_config(routes: list[Route]) -> str:
+    """Render the LiteLLM config.yaml text for the given routes."""
     lines = ["# AUTO-GENERATED by copilot_auth.py from your live Copilot subscription.", "model_list:"]
-    for m in models:
-        if _excluded(m):
-            continue
-        route = f"github_copilot/{m}"
-        base = m if m.startswith(("claude", "anthropic")) else f"anthropic-{m}"
-        # 1M models get BOTH a bare entry (routes the request Claude Code sends
-        # after it strips [1m]) and a [1m] entry (so the picker offers the 1M
-        # variant). Non-1M models: bare only.
-        names = [base, f"{base}[1m]"] if _has_1m(m) else [base]
-        responses = "codex" in m.lower() or m.lower().startswith("gpt-5")
-        for name in names:
-            lines.append(f"  - model_name: {name}")
-            if responses:
-                lines.append("    model_info:")
-                lines.append("      mode: responses")
-            lines.append("    litellm_params:")
-            lines.append(f"      model: {route}")
+    for route in routes:
+        lines.append(f"  - model_name: {route.name}")
+        if route.responses:
+            lines += ["    model_info:", "      mode: responses"]
+        lines += ["    litellm_params:", f"      model: {route.target}"]
     lines += ["", "general_settings:", "  master_key: os.environ/LITELLM_MASTER_KEY", ""]
-    CONFIG_FILE.write_text("\n".join(lines))
+    return "\n".join(lines)
+
+
+def write_config(models: list[dict[str, Any]]) -> None:
+    """Write config.yaml with every route and defaults.env with Claude Code's default models."""
+    CONFIG_FILE.write_text(render_config(plan_routes(models)))
+    defaults = claude_defaults(models)
+    DEFAULTS_FILE.write_text("".join(f"{key}={value}\n" for key, value in defaults.items()))
+
+
+def _report(models: list[dict[str, Any]]) -> None:
+    """Log what the gateway will expose and which defaults Claude Code gets."""
+    kept = _kept_models(models)
+    _log(f"  exposing {len(kept)} of {len(models)} models: {', '.join(m['id'] for m in kept)}")
+    for key, value in claude_defaults(models).items():
+        _log(f"  {key}={value}")
 
 
 def main() -> int:
+    """Validate or refresh the Copilot token, then write config.yaml and defaults.env from the live model list."""
     _log(f"Token dir: {TOKEN_DIR}")
     token = read_access_token()
 
@@ -238,6 +344,7 @@ def main() -> int:
             _log(f"✓ Token valid. {len(models)} models available. No refresh needed.")
             save_tokens(token, info)
             write_config(models)
+            _report(models)
             return 0
         _log("✗ Token can't fetch models — re-authenticating.")
     else:
@@ -251,6 +358,7 @@ def main() -> int:
     _log(f"✓ Authenticated. {len(models)} models available.")
     save_tokens(token, info)
     write_config(models)
+    _report(models)
     return 0
 
 
