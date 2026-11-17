@@ -104,9 +104,7 @@ def list_models(api_token: str, api_base: str) -> list[dict[str, Any]]:
     headers = {**MODELS_HEADERS, "authorization": f"Bearer {api_token}"}
     resp = httpx.get(f"{api_base.rstrip('/')}/models", headers=headers, timeout=30)
     resp.raise_for_status()
-    data = resp.json()
-    items = data.get("data", []) if isinstance(data, dict) else data
-    return [m for m in items if isinstance(m, dict) and m.get("id")]
+    return [m for m in resp.json().get("data", []) if isinstance(m, dict) and m.get("id")]
 
 
 def sanity_check(access_token: str) -> tuple[bool, list[dict[str, Any]], dict | None]:
