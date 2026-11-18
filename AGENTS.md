@@ -15,13 +15,12 @@ at `http://localhost:4000`, in both API shapes:
 The user installs it once with `setup.sh`. After that, `c-claude` and `c-codex`
 in any new terminal start the stack when it is down and launch the tool against
 it. Plain `claude` and `codex` are never changed. Nothing is deployed; this is a
-workstation tool.
+local developer tool.
 
 ## Hard rules
 
-- **No employer names.** The repository must never contain the name of the
-  operator's former or current employer, or of their teams. Check with
-  `git grep -niE '<names>'` before every commit.
+- **No personal details** in files or in anything published around them. See
+  "Issues, pull requests and commits".
 - **LiteLLM is pinned.** The exact pin is `litellm[proxy]==1.106.2`, because
   LiteLLM was compromised on PyPI twice in 2026 (the README supply-chain notice
   has the details). Never loosen it to a range. Change it only by pull request,
@@ -31,7 +30,7 @@ workstation tool.
   RC files or the Copilot token folder. Pass the key by reference:
   `printf 'Authorization: Bearer %s\n' "$LITELLM_MASTER_KEY" | curl -H @- ...`.
 - **Branches.** `dev` is the working branch. Changes land by pull request into
-  `dev` with CI green and review closed. `main` is moved only by the operator.
+  `dev` with CI green and review closed. `main` is moved only by a maintainer.
 - **Code style.** No comments in code (docstrings and one file header only), full
   type annotations on Python functions, `ruff` clean, shellcheck clean. Shell
   sourced by users must work in bash 3.2, bash 5 and zsh.
@@ -182,7 +181,7 @@ patch twice is a no-op.
 
 ## Testing
 
-Tests run in CI, not on the workstation. Lint and shellcheck may run locally:
+Tests run in CI, not locally. Lint and shellcheck may run locally:
 
 ```bash
 shellcheck setup.sh entrypoint.sh shell/cc-copilot.sh tests/*.sh scripts/*.sh
@@ -243,7 +242,7 @@ Output goes to
 - `calls/<tool>-<model>.log`: the full output of each call;
 - `gateway.log`: the LiteLLM log for the run.
 
-To run it as an agent without the operator's key, export a throwaway key and
+To run it as an agent without the user's key, export a throwaway key and
 secret (`LITELLM_MASTER_KEY=sk-<random>`, `SEARXNG_SECRET=<random>`) together
 with `COPILOT_TOKEN_DIR`. Stop any gateway started with another key first
 (`cc-copilot --stop`). Otherwise the script finds the gateway running but never
@@ -259,6 +258,51 @@ printf 'Authorization: Bearer %s\n' "$LITELLM_MASTER_KEY" \
 
 Vary `stream`, `tools` and `reasoning` one at a time to isolate a failure.
 Claude Code uses `/v1/messages` and Codex uses `/v1/responses`.
+
+## Issues, pull requests and commits
+
+Everything published to the repository host is public: issue and pull request
+titles and bodies, comments, reviews, commit messages, branch names, files and
+CI logs.
+
+- **Neutral content only.** Describe the software, the change and the evidence,
+  never the people or their setup:
+  - no names, signatures, employers or teams;
+  - nothing about which computer, network or subscription plan something ran
+    on;
+  - no local paths, hostnames, usernames or certificate names.
+
+  Write "verified against a gateway built from `<sha>`", not where or by whom.
+  Commands use repository-relative paths.
+- **Check before publishing.** Read every title, body, comment and commit
+  message for the items above before creating or editing it. For files, run
+  `git grep -niE '<terms>'` after `git add` and before each commit.
+- **Issues.** One problem per issue, with:
+  - what happens and what should happen;
+  - the evidence: command and output, run id, SHA;
+  - acceptance criteria that a test or command can check.
+
+  Label anything not yet proven as a hypothesis.
+- **Branches and pull requests.**
+  - Branch off `dev` and open a draft pull request into `dev` at the first
+    push.
+  - Follow "Testing" for red, then green.
+  - The body states the change, the evidence (run ids, SHAs, command output)
+    and what was not verified. Use `Refs #n` while work on the issue remains
+    and `Closes #n` when the pull request completes it.
+  - Squash-merge into `dev` once every check is green and review is closed,
+    then delete the branch. Its commits stay visible on the pull request.
+- **Commits.** An imperative subject and one logical change; the body says why.
+  Stage files by name.
+- **If something private was published:**
+  - Deleting a comment removes it completely.
+  - An edited comment or issue or pull request body keeps its old text in the
+    edit history. A maintainer removes each old revision with "Delete revision
+    from history" in the web page.
+  - A title change stays visible in the timeline.
+  - Commits pushed to `dev` or `main` are never rewritten (no force-push) and
+    stay reachable by SHA, so check commit messages and staged files before
+    pushing.
 
 ## Reading logs
 
@@ -286,7 +330,7 @@ To summarize errors in a saved log:
 | Symptom | Cause | Fix |
 |---|---|---|
 | A new device code on every restart | An older version discarded the token on network errors. | Update: `cc-copilot --update`, then `cc-copilot -d`. |
-| `CERTIFICATE_VERIFY_FAILED` in the gateway log | The network re-signs HTTPS with a company root CA. | `bash scripts/diagnose-tls.sh` prints a VERDICT. Usually: open a new terminal, then `cc-copilot --stop; cc-copilot -d`. Otherwise run `scripts/export-company-ca.sh` (WSL only) and set `COPILOT_CA_FILE`; on macOS or Linux, set `COPILOT_CA_FILE` to the company root CA from IT. |
+| `CERTIFICATE_VERIFY_FAILED` in the gateway log | The network re-signs HTTPS with a company root CA. | `bash scripts/diagnose-tls.sh` prints a VERDICT. Usually: open a new terminal, then `cc-copilot --stop; cc-copilot -d`. Otherwise run `scripts/export-company-ca.sh` (WSL only) and set `COPILOT_CA_FILE`; on macOS or Linux, set `COPILOT_CA_FILE` to the company root CA from the network administrator. |
 | `state/host-ca.pem` is empty | The shell that started the gateway had functions from before the update. | Open a new terminal, then `cc-copilot --stop; cc-copilot -d`. |
 | `Authenticated but still can't fetch models` | The plan or organization policy blocks API access, or a proxy blocks it. | Confirm Copilot works in the IDE. |
 | `PLAN` results in the smoke test | The model is listed but not in the plan. | Enable it in GitHub Copilot settings or use another model. |
