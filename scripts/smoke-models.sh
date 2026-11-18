@@ -6,7 +6,7 @@
 # (LITELLM_MASTER_KEY, SEARXNG_SECRET); starts the gateway when it is down.
 # Each call must read a random token from a file with a tool and run a web
 # search: the token in the output proves tool use, SearXNG traffic during the
-# call proves the search. Claude Code and Codex run with throwaway config
+# call shows a search ran. Claude Code and Codex run with throwaway config
 # folders, so your hooks, MCP servers and history are untouched; Codex keeps
 # your model_reasoning_effort (override with SMOKE_CODEX_EFFORT). Writes
 # state/smoke/<UTC time>/ with results.tsv, one log per call and gateway.log.
@@ -17,7 +17,8 @@ set -uo pipefail
 TOOLS="${1:-all}"
 FILTER="${2:-.}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PROMPT="Read the file smoke-token.txt in the current directory with your tools, then use your web search tool to find the latest LiteLLM release. Reply with the file's exact content on the first line and the release on the second line."
+TOKEN_FILE=smoke-token.txt
+PROMPT="Read the file $TOKEN_FILE in the current directory with your tools, then use your web search tool to find the latest LiteLLM release. Reply with the file's exact content on the first line and the release on the second line."
 CALL_TIMEOUT="${SMOKE_TIMEOUT:-180}"
 # shellcheck disable=SC2016
 WRAP='. "$COPILOT_GATEWAY_DIR/shell/cc-copilot.sh" && "$0" "$@"'
@@ -48,16 +49,21 @@ fi
 searxng="$(__cc_copilot_compose ps -q searxng)"
 
 searxng_bytes() {
-  docker exec "$searxng" cat /sys/class/net/eth0/statistics/rx_bytes 2> /dev/null || echo 0
+  docker exec "$searxng" cat /sys/class/net/eth0/statistics/rx_bytes 2> /dev/null
 }
+
+if [[ -z "$searxng" ]] || ! searxng_bytes > /dev/null; then
+  echo "Cannot read the SearXNG container's traffic counter, so web search cannot be checked." >&2
+  exit 1
+fi
 
 classify() {
   local status="$1" log="$2" token="$3" searched="$4"
-  if [[ "$status" == 0 ]] && grep -q "$token" "$log" && [[ "$searched" -gt 0 ]]; then
+  if [[ "$status" == 0 ]] && grep -qF "$token" "$log" && [[ "$searched" -gt 0 ]]; then
     echo "PASS"
   elif [[ "$status" != 0 ]] && grep -qiE 'model_not_supported|requested model is not supported' "$log"; then
     echo "PLAN"
-  elif [[ "$status" == 0 ]] && grep -q "$token" "$log"; then
+  elif [[ "$status" == 0 ]] && grep -qF "$token" "$log"; then
     echo "NOSEARCH"
   elif [[ "$status" == 0 ]]; then
     echo "NOTOOL"
@@ -69,7 +75,7 @@ classify() {
 detail() {
   case "$1" in
     NOSEARCH) echo "the token was read, but SearXNG got no traffic during the call" ;;
-    NOTOOL) echo "the answer does not hold the token from smoke-token.txt" ;;
+    NOTOOL) echo "the answer does not hold the token from $TOKEN_FILE" ;;
     *) grep -iE 'error|exception|status|not supported|invalid|unexpected' "$2" | head -n 1 | cut -c 1-240 | tr '\t' ' ' ;;
   esac
 }
@@ -78,7 +84,7 @@ run_call() {
   local tool="$1" model="$2" log start status result seconds token before searched
   log="$OUT/calls/$tool-${model//[^A-Za-z0-9._-]/_}.log"
   token="SMOKE-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
-  printf '%s\n' "$token" > "$OUT/work/smoke-token.txt"
+  printf '%s\n' "$token" > "$OUT/work/$TOKEN_FILE"
   start="$(date +%s)"
   before="$(searxng_bytes)"
   if [[ "$tool" == claude ]]; then
