@@ -28,12 +28,18 @@ compose job that builds the image and checks SearXNG answers JSON).
 running, and wait for it when it is starting. The container entrypoint
 (`entrypoint.sh`):
 
-1. Runs `copilot_auth.py`: reuses the cached GitHub token if it can list models,
+1. Runs `ca_bundle.py`: certifi plus the host certificates the shell functions
+   copied into `state/host-ca.pem` (system bundle, Windows roots on WSL, macOS
+   keychains, `$COPILOT_CA_FILE`) become `state/ca-bundle.pem`, exported as
+   `SSL_CERT_FILE` unless one is set. httpx and LiteLLM both read it.
+2. Runs `copilot_auth.py`: reuses the cached GitHub token if it can list models,
    otherwise runs the GitHub device flow. The code appears in the log, and the
    host shell opens the verification URL it finds there (github.com or GHE).
-2. Writes `state/config.yaml` and `state/defaults.env` from the live `/models`
+   The token is saved as soon as the device flow returns it; a transport error
+   exits 1 with a hint and never starts a new device flow.
+3. Writes `state/config.yaml` and `state/defaults.env` from the live `/models`
    metadata.
-3. Execs `litellm --config /state/config.yaml` with `LITELLM_MODE=PRODUCTION`.
+4. Execs `litellm --config /state/config.yaml` with `LITELLM_MODE=PRODUCTION`.
 
 The host functions read `state/defaults.env` for Claude Code's
 `ANTHROPIC_DEFAULT_*_MODEL`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, and Codex's
@@ -46,12 +52,13 @@ The host functions read `state/defaults.env` for Claude Code's
 | `setup.sh` | Keeps the key and SearXNG secret in `~/.config/tcc-copilot-gateway/secrets.env` (0600) and writes the COPILOT-GATEWAY RC block that loads it, exports paths and port, and sources `shell/cc-copilot.sh`. Idempotent by replace; refuses unbalanced markers. |
 | `shell/cc-copilot.sh` | `c-claude`, `c-codex`, `cc-copilot` (attached, `-d`, `--stop`, `--models`, `--update`, `--help`), `cc-copilot-logs`. bash and zsh. |
 | `compose.yaml`, `Dockerfile`, `entrypoint.sh`, `.dockerignore` | The stack. |
+| `ca_bundle.py` | certifi plus the host's trusted certificates, valid and deduplicated, for networks that inspect HTTPS. |
 | `copilot_auth.py` | Token check, device flow, model onboarding, config and defaults rendering. |
 | `litellm_patches.py` | Exact-snippet patches to the installed LiteLLM; the build fails when one no longer matches. |
 | `searxng/settings.yml` | SearXNG settings. |
 | `requirements.txt` | `litellm[proxy]==1.106.2` + `openai`. Change by PR only. |
-| `tests/` | `installer_test.sh` (bash/zsh, fake `docker`, `claude`, `codex`), `test_model_onboarding.py`, `test_litellm_patches.py`. |
-| `state/` | Generated `config.yaml` and `defaults.env`. Gitignored. |
+| `tests/` | `installer_test.sh` (bash/zsh, fake `docker`, `claude`, `codex`), `test_model_onboarding.py`, `test_litellm_patches.py`, `test_ca_bundle.py`, `test_auth_network.py`. |
+| `state/` | Generated `config.yaml`, `defaults.env`, `host-ca.pem` and `ca-bundle.pem`. Gitignored. |
 
 ## Models
 

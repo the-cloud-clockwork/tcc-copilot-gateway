@@ -171,6 +171,29 @@ LiteLLM 1.106.2 sends the whole prompt, including Claude Code's
 is upstream in [BerriAI/litellm#43458](https://github.com/BerriAI/litellm/pull/43458),
 after 1.106.2.
 
+## Corporate networks
+
+Some company networks inspect HTTPS and re-sign it with their own root
+certificate. Your computer trusts that certificate, but a container only trusts
+the public ones by default. On every start, the gateway copies the certificates
+your computer trusts into `state/host-ca.pem` and trusts them as well:
+
+- **Linux and WSL:** the system CA bundle.
+- **WSL:** the Windows certificate store as well.
+- **macOS:** the System keychains.
+
+If the log still says `the HTTPS certificate is not trusted`, save your
+company's root CA as a PEM file (your IT team can provide it) and add this line
+to your shell RC file, outside the COPILOT-GATEWAY block:
+
+```bash
+export COPILOT_CA_FILE=~/company-root-ca.pem
+```
+
+Then open a new terminal and run `cc-copilot -d`. A network failure never
+discards your GitHub login: the gateway keeps the token and asks for a new
+device code only when GitHub rejects the token.
+
 ## Use it from other clients
 
 The gateway speaks the OpenAI API (`/v1/chat/completions`, `/v1/responses`) and
@@ -187,6 +210,8 @@ curl http://localhost:4000/v1/chat/completions \
 
 - **Browser did not open:** the log shows the URL and the code
   (`cc-copilot-logs`).
+- **`CERTIFICATE_VERIFY_FAILED` or "the HTTPS certificate is not trusted":**
+  your network inspects HTTPS; see [Corporate networks](#corporate-networks).
 - **"Authenticated but still can't fetch models":** your plan or organization
   policy does not grant Copilot API access, or a proxy blocks
   `api.githubcopilot.com`. Confirm Copilot works in your IDE first.

@@ -112,6 +112,33 @@ __cc_copilot_prepare() {
     return 1
   fi
   mkdir -p "$COPILOT_TOKEN_DIR" "$COPILOT_GATEWAY_DIR/state"
+  __cc_copilot_trust > "$COPILOT_GATEWAY_DIR/state/host-ca.pem"
+}
+
+__cc_copilot_trust() {
+  local bundle
+  for bundle in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+    if [[ -s "$bundle" ]]; then
+      cat "$bundle"
+      break
+    fi
+  done
+  if [[ "$(uname -s)" == Darwin ]]; then
+    security find-certificate -a -p /Library/Keychains/System.keychain \
+      /System/Library/Keychains/SystemRootCertificates.keychain 2> /dev/null
+  fi
+  if command -v powershell.exe > /dev/null 2>&1; then
+    # shellcheck disable=SC2016
+    powershell.exe -NoProfile -NonInteractive -Command 'Get-ChildItem Cert:\LocalMachine\Root, Cert:\CurrentUser\Root | ForEach-Object { "-----BEGIN CERTIFICATE-----"; [Convert]::ToBase64String($_.RawData, "InsertLineBreaks"); "-----END CERTIFICATE-----" }' 2> /dev/null | tr -d '\r'
+  fi
+  if [[ -n "${COPILOT_CA_FILE:-}" ]]; then
+    if [[ -s "$COPILOT_CA_FILE" ]]; then
+      cat "$COPILOT_CA_FILE"
+    else
+      printf 'COPILOT_CA_FILE=%s is missing or empty; ignoring it.\n' "$COPILOT_CA_FILE" >&2
+    fi
+  fi
+  return 0
 }
 
 __cc_copilot_start_detached() {
