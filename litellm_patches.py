@@ -60,7 +60,12 @@ PATCHES = (
     Patch(
         path="litellm/proxy/common_utils/codex_model_catalog.py",
         old='        "supported_in_api": True,\n        "upgrade": upgrade,\n    }\n',
-        new='        "supported_in_api": True,\n        "upgrade": upgrade,\n        "use_responses_lite": False,\n    }\n',
+        new=(
+            '        "supported_in_api": True,\n'
+            '        "upgrade": upgrade,\n'
+            '        "use_responses_lite": False,\n'
+            "    }\n"
+        ),
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/13",
     ),
     Patch(
@@ -75,7 +80,11 @@ PATCHES = (
     ),
     Patch(
         path="litellm/proxy/common_utils/codex_model_catalog.py",
-        old="            context_window=row.max_input_tokens,\n            base_instructions=instructions,\n        )\n",
+        old=(
+            "            context_window=row.max_input_tokens,\n"
+            "            base_instructions=instructions,\n"
+            "        )\n"
+        ),
         new=(
             "            context_window=row.max_input_tokens,\n"
             "            base_instructions=instructions,\n"
