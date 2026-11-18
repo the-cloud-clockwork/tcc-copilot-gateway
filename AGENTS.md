@@ -80,8 +80,9 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
 - **Model routing** (`copilot_auth.py`):
   - Exposed: chat models with a `model_picker_category` whose `policy.state` is
     not `disabled`. An entry without `capabilities` metadata falls back to
-    name rules (embeddings, legacy snapshots and old GPT-3.5/4 and Gemini 2
-    ids are excluded).
+    name rules: ids containing `embedding`, `trajectory`, `picker` or
+    `mai-code`, dated snapshots, Claude below 4.6, GPT-3.5/4 and Gemini 2 are
+    excluded.
   - Responses mode when `supported_endpoints` lists `/responses`, chat mode
     when it lists other endpoints. Without `supported_endpoints`, ids that
     contain `codex` or start with `gpt-5` use responses mode.
@@ -90,8 +91,9 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
     prompt limit (`max_prompt_tokens`, else `max_context_window_tokens`) is at
     least 1,000,000.
   - `drop_params: true`: unsupported parameters are dropped instead of failing.
-    Codex sends its configured reasoning effort with every request, which chat
-    models without reasoning support rejected before this setting.
+    Codex sends a reasoning effort, which LiteLLM rejected with
+    `UnsupportedParamsError` for chat models without reasoning support
+    (issue #10 has the probe).
 - **Defaults** (`state/defaults.env`):
   - `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`: the newest model per family,
     with fallbacks.
