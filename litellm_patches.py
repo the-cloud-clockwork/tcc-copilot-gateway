@@ -15,7 +15,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Patch:
-    """One exact snippet replacement in a file relative to the site-packages root, with its upstream reference."""
+    """One exact snippet replacement in a file relative to the site-packages root, with the reference that explains it."""
 
     path: str
     old: str
@@ -42,10 +42,13 @@ PATCHES = (
         ),
         new=(
             "                elif select_data_generator:\n"
-            '                    if route_type == "aresponses" and not self._is_streaming_response(response):\n'
-            "                        from litellm.responses.streaming_iterator import CachedResponsesAPIStreamingIterator\n"
+            "                    from litellm.responses.streaming_iterator import CachedResponsesAPIStreamingIterator\n"
+            "                    from litellm.types.llms.openai import ResponsesAPIResponse\n"
             "\n"
-            "                        response = CachedResponsesAPIStreamingIterator(response=response, logging_obj=logging_obj)\n"
+            '                    if route_type == "aresponses" and isinstance(response, ResponsesAPIResponse):\n'
+            "                        response = CachedResponsesAPIStreamingIterator(\n"
+            "                            response=response, logging_obj=logging_obj\n"
+            "                        )\n"
             "                    selected_data_generator = select_data_generator(\n"
         ),
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/10",
