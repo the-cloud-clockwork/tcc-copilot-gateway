@@ -85,17 +85,27 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
   - Responses mode when `supported_endpoints` lists `/responses`, chat mode
     when it lists other endpoints. Without `supported_endpoints`, ids that
     contain `codex` or start with `gpt-5` use responses mode.
-  - Names: non-Claude models are served as `anthropic-<id>` (for Claude Code's
-    `/model` picker) and as `<id>`. A `[1m]` variant exists only when the
-    prompt limit (`max_prompt_tokens`, else `max_context_window_tokens`) is at
-    least 1,000,000.
+  - Which tool gets a model (hard rule): Claude Code gets every model except
+    OpenAI's; Codex gets every model except Anthropic's. The `/models` `vendor`
+    field decides. Without it, the id decides (`claude…` is Anthropic,
+    `gpt-…` and `o1`/`o3`/`o4` are OpenAI).
+  - Names follow from that rule:
+    - Anthropic models: bare id, for Claude Code only.
+    - OpenAI and Azure OpenAI models: bare id, for Codex only, with no
+      `anthropic-` name.
+    - Every other vendor: `anthropic-<id>` for Claude Code's `/model` picker,
+      and `<id>` for Codex.
+    - The Codex catalog leaves out `claude*` and `anthropic-*` names (patch 5).
+    - A `[1m]` variant exists only for Claude Code names, and only when the
+      prompt limit (`max_prompt_tokens`, else `max_context_window_tokens`) is
+      at least 1,000,000.
   - `drop_params: true`: unsupported parameters are dropped instead of failing.
     Codex sends a reasoning effort, which LiteLLM rejected with
     `UnsupportedParamsError` for chat models without reasoning support
     (issue #10 has the probe).
 - **Defaults** (`state/defaults.env`):
   - `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`: the newest model per family,
-    with fallbacks.
+    with fallbacks, never an OpenAI model.
   - `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: the smaller prompt limit of the Opus and
     Sonnet defaults, clamped to 100k..1M.
   - `COPILOT_CODEX_MODEL`, `COPILOT_CODEX_CONTEXT_WINDOW` and
@@ -185,6 +195,9 @@ patch twice is a no-op.
    results as an assistant message followed by the other calls. The client never
    receives `litellm_web_search`. CI runs `tests/websearch_mixed_check.py` in the
    built image.
+5. `proxy/common_utils/codex_model_catalog.py`, `_codex_can_drive`: the Codex
+   catalog leaves out `claude*` and `anthropic-*` names, which are for Claude
+   Code only. `tests/codex_catalog_check.py` checks it in the built image.
 
 ## Testing
 
@@ -219,11 +232,9 @@ The script sources the real functions and starts the gateway if needed. It
 uses throwaway `CLAUDE_CONFIG_DIR` and `CODEX_HOME` folders and makes one
 headless call per model name:
 
-- `anthropic-*` names, including `[1m]`: `c-claude -p ... --model M
-  --allowedTools Read,WebSearch` only.
-- `claude*` names: both `c-claude` and `c-codex`, except `[1m]` names, which
-  go to `c-claude` only.
-- Every other bare id: `c-codex --search exec -m M` only.
+- `claude*` and `anthropic-*` names, including `[1m]`: `c-claude -p ... --model
+  M --allowedTools Read,WebSearch` only.
+- Every other name, the bare ids: `c-codex --search exec -m M` only.
 
 Each call is asked to read a random value from `smoke-check.txt` with a tool
 and to run a web search. The script counts the bytes the SearXNG container
