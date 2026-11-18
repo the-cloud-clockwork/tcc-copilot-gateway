@@ -4,8 +4,8 @@
 # Usage: scripts/smoke-models.sh [claude|codex|all] [model regex]
 # Needs the gateway environment of a terminal opened after setup.sh
 # (LITELLM_MASTER_KEY, SEARXNG_SECRET); starts the gateway when it is down.
-# Each call must read a random token from a file with a tool and run a web
-# search: the token in the output proves tool use, SearXNG traffic during the
+# Each call must read a random value from a file with a tool and run a web
+# search: the value in the output proves tool use, SearXNG traffic during the
 # call shows a search ran. Claude Code and Codex run with throwaway config
 # folders, so your hooks, MCP servers and history are untouched; Codex keeps
 # your model_reasoning_effort (override with SMOKE_CODEX_EFFORT). Writes
@@ -17,9 +17,9 @@ set -uo pipefail
 TOOLS="${1:-all}"
 FILTER="${2:-.}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TOKEN_FILE=smoke-token.txt
-PROMPT="Read the file $TOKEN_FILE in the current directory with your tools, then use your web search tool to find the latest LiteLLM release. Reply with the file's exact content on the first line and the release on the second line."
-CALL_TIMEOUT="${SMOKE_TIMEOUT:-180}"
+CHECK_FILE=smoke-check.txt
+PROMPT="Read the file $CHECK_FILE in the current directory with your tools, then use your web search tool to find the latest LiteLLM release. Reply with the file's exact content on the first line and the release on the second line."
+CALL_TIMEOUT="${SMOKE_TIMEOUT:-300}"
 # shellcheck disable=SC2016
 WRAP='. "$COPILOT_GATEWAY_DIR/shell/cc-copilot.sh" && "$0" "$@"'
 
@@ -74,8 +74,8 @@ classify() {
 
 detail() {
   case "$1" in
-    NOSEARCH) echo "the token was read, but SearXNG got no traffic during the call" ;;
-    NOTOOL) echo "the answer does not hold the token from $TOKEN_FILE" ;;
+    NOSEARCH) echo "the check file was read, but SearXNG got no traffic during the call" ;;
+    NOTOOL) echo "the answer does not hold the value from $CHECK_FILE" ;;
     *) grep -iE 'error|exception|status|not supported|invalid|unexpected' "$2" | head -n 1 | cut -c 1-240 | tr '\t' ' ' ;;
   esac
 }
@@ -83,8 +83,8 @@ detail() {
 run_call() {
   local tool="$1" model="$2" log start status result seconds token before searched
   log="$OUT/calls/$tool-${model//[^A-Za-z0-9._-]/_}.log"
-  token="SMOKE-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
-  printf '%s\n' "$token" > "$OUT/work/$TOKEN_FILE"
+  token="PONG-$(od -An -N4 -tu4 /dev/urandom | tr -d ' \n')"
+  printf '%s\n' "$token" > "$OUT/work/$CHECK_FILE"
   start="$(date +%s)"
   before="$(searxng_bytes)"
   if [[ "$tool" == claude ]]; then
