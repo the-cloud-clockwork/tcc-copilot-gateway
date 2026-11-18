@@ -300,9 +300,9 @@ CI logs.
     edit history. A maintainer removes each old revision with "Delete revision
     from history" in the web page.
   - A title change stays visible in the timeline.
-  - Commits pushed to `dev` or `main` cannot be rewritten (force-push is
-    blocked) and stay reachable by SHA, so check commit messages and staged
-    files before pushing.
+  - Commits pushed to `dev` or `main` are never rewritten (no force-push) and
+    stay reachable by SHA, so check commit messages and staged files before
+    pushing.
 
 ## Reading logs
 
