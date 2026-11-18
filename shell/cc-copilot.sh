@@ -129,7 +129,12 @@ __cc_copilot_trust() {
   fi
   if command -v powershell.exe > /dev/null 2>&1; then
     # shellcheck disable=SC2016
-    powershell.exe -NoProfile -NonInteractive -Command 'Get-ChildItem Cert:\LocalMachine\Root, Cert:\CurrentUser\Root | ForEach-Object { "-----BEGIN CERTIFICATE-----"; [Convert]::ToBase64String($_.RawData, "InsertLineBreaks"); "-----END CERTIFICATE-----" }' 2> /dev/null | tr -d '\r'
+    local roots='Get-ChildItem Cert:\LocalMachine\Root, Cert:\CurrentUser\Root | ForEach-Object { "-----BEGIN CERTIFICATE-----"; [Convert]::ToBase64String($_.RawData, "InsertLineBreaks"); "-----END CERTIFICATE-----" }'
+    if command -v timeout > /dev/null 2>&1; then
+      timeout 20 powershell.exe -NoProfile -NonInteractive -Command "$roots"
+    else
+      powershell.exe -NoProfile -NonInteractive -Command "$roots"
+    fi 2> /dev/null | tr -d '\r'
   fi
   if [[ -n "${COPILOT_CA_FILE:-}" ]]; then
     if [[ -s "$COPILOT_CA_FILE" ]]; then

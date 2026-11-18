@@ -66,6 +66,7 @@ cat > "$HOME/bin/docker" <<'FAKE'
 #!/bin/sh
 case "$*" in
   *"ps --status running --quiet gateway"*) [ -f "$HOME/.fake-gateway" ] && echo fake-gateway ;;
+  *" up "*) touch "$HOME/.fake-gateway" ;;
   *" logs "*) cat "$HOME/fake-logs.txt" 2> /dev/null ;;
 esac
 exit 0
@@ -123,6 +124,12 @@ if grep -q $'\r' "$host_ca"; then
   fail "the Windows root certificates kept their carriage returns"
 fi
 [[ "$(grep -c 'BEGIN CERTIFICATE' "$host_ca")" -gt 2 ]] || fail "cc-copilot -d did not add the system CA bundle"
+rm -f "$host_ca" "$HOME/.fake-gateway"
+alias_run c-claude > /dev/null
+grep -q 'TESTWINDOWSROOT' "$host_ca" 2> /dev/null || fail "c-claude did not refresh the gateway's trust when it started the gateway"
+rm -f "$host_ca" "$HOME/.fake-gateway"
+alias_run cc-copilot > /dev/null
+grep -q 'TESTWINDOWSROOT' "$host_ca" 2> /dev/null || fail "attached cc-copilot did not refresh the gateway's trust"
 kill "$fake"
 wait "$fake" 2> /dev/null || true
 rm -f "$HOME/.fake-gateway"

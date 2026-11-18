@@ -133,9 +133,9 @@ def network_hint(error: httpx.TransportError) -> str:
             f"✗ {host}: the HTTPS certificate is not trusted ({error}).\n"
             "  Your network inspects HTTPS with its own root certificate. The gateway trusts the certificates\n"
             "  your computer trusts; when this repeats, save your company's root CA as a PEM file, set\n"
-            "  COPILOT_CA_FILE to its path and run cc-copilot -d. Your GitHub login is kept."
+            "  COPILOT_CA_FILE to its path and run cc-copilot -d."
         )
-    return f"✗ Can't reach {host} ({error}). Your GitHub login is kept; check the network and run cc-copilot -d."
+    return f"✗ Can't reach {host} ({error}). Check the network and run cc-copilot -d."
 
 
 def open_browser(url: str) -> None:
@@ -419,6 +419,8 @@ def main() -> int:
         return _refresh()
     except httpx.TransportError as e:
         _log(network_hint(e))
+        if read_access_token():
+            _log("  Your GitHub login is kept; the next start reuses it.")
         return 1
 
 

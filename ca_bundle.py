@@ -9,7 +9,7 @@ from pathlib import Path
 
 import certifi
 
-PEM_BLOCK = re.compile(r"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----", re.DOTALL)
+PEM_BLOCK = re.compile(r"-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]*?-----END CERTIFICATE-----")
 
 
 def _certificates(pem: str) -> list[bytes]:

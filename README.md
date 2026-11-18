@@ -192,7 +192,7 @@ export COPILOT_CA_FILE=~/company-root-ca.pem
 
 Then open a new terminal and run `cc-copilot -d`. A network failure never
 discards your GitHub login: the gateway keeps the token and asks for a new
-device code only when GitHub rejects the token.
+device code only when GitHub rejects the token or lists no models for it.
 
 ## Use it from other clients
 

@@ -45,6 +45,45 @@ def test_existing_token_and_tls_failure_do_not_reauthenticate(
     assert (token_dir / "access-token").read_text() == "gho_existing"
 
 
+def test_existing_token_and_model_list_failure_do_not_reauthenticate(
+    token_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A transport error on the model list also exits 1 without a new device flow."""
+    (token_dir / "access-token").write_text("gho_existing")
+
+    def exchange(access_token: str) -> dict[str, Any]:
+        """Accept the token."""
+        return {"token": "copilot-api", "endpoints": {"api": "https://api.githubcopilot.com"}}
+
+    def unreachable(api_token: str, api_base: str) -> list[dict[str, Any]]:
+        """Raise the error an unreachable Copilot API causes."""
+        raise httpx.ConnectTimeout("timed out", request=httpx.Request("GET", f"{api_base}/models"))
+
+    monkeypatch.setattr(copilot_auth, "exchange_api_key", exchange)
+    monkeypatch.setattr(copilot_auth, "list_models", unreachable)
+    monkeypatch.setattr(copilot_auth, "device_flow", _no_device_flow)
+    assert copilot_auth.main() == 1
+    out = capsys.readouterr().out
+    assert "api.githubcopilot.com" in out
+    assert "login is kept" in out
+
+
+def test_device_flow_network_failure_does_not_claim_a_kept_login(
+    token_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A transport error before any token exists exits 1 without saying the login is kept."""
+
+    def unreachable() -> str:
+        """Raise the error an unreachable github.com causes during the device flow."""
+        raise httpx.ConnectError("unreachable", request=httpx.Request("POST", "https://github.com/login/device/code"))
+
+    monkeypatch.setattr(copilot_auth, "device_flow", unreachable)
+    assert copilot_auth.main() == 1
+    out = capsys.readouterr().out
+    assert "github.com" in out
+    assert "login is kept" not in out
+
+
 def test_fresh_login_is_kept_when_the_network_fails(token_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The token from a finished device flow is saved even when the next call fails on the network."""
 
@@ -83,6 +122,33 @@ def test_rejected_token_still_reauthenticates(token_dir: Path, monkeypatch: pyte
     monkeypatch.setattr(copilot_auth, "exchange_api_key", exchange)
     monkeypatch.setattr(copilot_auth, "device_flow", new_login)
     monkeypatch.setattr(copilot_auth, "list_models", models)
+    monkeypatch.setattr(copilot_auth, "write_config", no_config)
+    assert copilot_auth.main() == 0
+    assert (token_dir / "access-token").read_text() == "gho_new"
+
+
+def test_empty_model_list_still_reauthenticates(token_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A token that lists no models leads to a new device flow."""
+    (token_dir / "access-token").write_text("gho_no_models")
+
+    def exchange(access_token: str) -> dict[str, Any]:
+        """Accept every token."""
+        return {"token": access_token, "endpoints": {"api": "https://api.githubcopilot.com"}}
+
+    def models(api_token: str, api_base: str) -> list[dict[str, Any]]:
+        """List no models for the old token and one for the new token."""
+        return [] if api_token == "gho_no_models" else [{"id": "gpt-4.1"}]
+
+    def new_login() -> str:
+        """Return a new token as a finished device flow does."""
+        return "gho_new"
+
+    def no_config(models: list[dict[str, Any]]) -> None:
+        """Skip writing config files."""
+
+    monkeypatch.setattr(copilot_auth, "exchange_api_key", exchange)
+    monkeypatch.setattr(copilot_auth, "list_models", models)
+    monkeypatch.setattr(copilot_auth, "device_flow", new_login)
     monkeypatch.setattr(copilot_auth, "write_config", no_config)
     assert copilot_auth.main() == 0
     assert (token_dir / "access-token").read_text() == "gho_new"

@@ -41,6 +41,13 @@ def test_malformed_blocks_are_dropped() -> None:
     assert _loaded(bundle) == len(BLOCKS)
 
 
+def test_truncated_block_keeps_the_next_certificate() -> None:
+    """A BEGIN line without its END does not swallow the valid certificate after it."""
+    bundle = ca_bundle.build(BASE, "-----BEGIN CERTIFICATE-----\nMIIBdGVzdA==\n" + NEW)
+    assert bundle is not None
+    assert _loaded(bundle) == len(BLOCKS)
+
+
 def test_windows_line_endings_are_accepted() -> None:
     """A certificate exported with CRLF line endings is still added."""
     bundle = ca_bundle.build(BASE, NEW.replace("\n", "\r\n"))

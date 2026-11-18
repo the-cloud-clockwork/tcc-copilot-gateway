@@ -65,9 +65,12 @@ jobs:
       - name: Gateway image builds its CA bundle from the host certificates
         run: |
           mkdir -p /tmp/ca-state
-          cp /etc/ssl/certs/ca-certificates.crt /tmp/ca-state/host-ca.pem
-          docker run --rm --entrypoint python -v /tmp/ca-state:/state -e COPILOT_STATE_DIR=/state \
-            tcc-copilot-gateway:local /app/ca_bundle.py
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -subj /CN=planted-company-root \
+            -days 1 -out /tmp/ca-state/host-ca.pem 2> /dev/null
+          docker run --rm --entrypoint sh -v /tmp/ca-state:/state -e COPILOT_STATE_DIR=/state tcc-copilot-gateway:local \
+            -c 'bundle="$(python /app/ca_bundle.py)" && test "$bundle" = /state/ca-bundle.pem &&
+              python -c "import ssl; ssl.create_default_context(cafile=\"$bundle\")"'
+          test -s /tmp/ca-state/ca-bundle.pem
       - name: SearXNG answers JSON searches
         run: |
           image="$(docker compose config --images | grep searxng)"
