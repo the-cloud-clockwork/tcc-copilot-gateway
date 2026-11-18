@@ -104,6 +104,7 @@ echo "  state/host-ca.pem: $(count_certs "$STATE/host-ca.pem") certificates, $ho
 echo "  state/ca-bundle.pem: $(count_certs "$STATE/ca-bundle.pem") certificates, $(holds "$STATE/ca-bundle.pem" "$cn") named '$cn'"
 echo "  SSL_CERT_FILE lines in .env: $env_lines"
 echo "  COPILOT_CA_FILE in this shell: ${COPILOT_CA_FILE:-unset}"
+echo "  COPILOT_GATEWAY_DIR in this shell: ${COPILOT_GATEWAY_DIR:-unset} (this clone: $ROOT)"
 
 echo
 echo "== Gateway container"
@@ -119,6 +120,10 @@ fi
 echo
 if [[ "$env_lines" != 0 ]]; then
   echo "VERDICT: .env sets SSL_CERT_FILE, so the gateway ignores your computer's certificates. Delete that line from $ROOT/.env, then run cc-copilot -d."
+elif [[ -n "${COPILOT_GATEWAY_DIR:-}" && "$COPILOT_GATEWAY_DIR" != "$ROOT" ]]; then
+  echo "VERDICT: your shell runs the gateway from $COPILOT_GATEWAY_DIR, not this clone. Pull dev there, or run ./setup.sh in this clone, then open a new terminal and run: cc-copilot --stop; cc-copilot -d"
+elif [[ "$(count_certs "$STATE/host-ca.pem")" == 0 ]]; then
+  echo "VERDICT: state/host-ca.pem is empty, so the shell that started the gateway had the old functions. Open a NEW terminal and run: cc-copilot --stop; cc-copilot -d"
 elif [[ "$system_result" == 0* ]]; then
   echo "VERDICT: this computer's system bundle verifies $HOST. Run cc-copilot -d to rebuild state/ca-bundle.pem; if the gateway still fails, send this output."
 elif [[ "$gateway_result" == 0* ]]; then
