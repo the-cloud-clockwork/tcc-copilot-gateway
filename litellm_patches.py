@@ -34,6 +34,22 @@ PATCHES = (
         ),
         upstream="https://github.com/BerriAI/litellm/pull/43458",
     ),
+    Patch(
+        path="litellm/proxy/common_request_processing.py",
+        old=(
+            "                elif select_data_generator:\n"
+            "                    selected_data_generator = select_data_generator(\n"
+        ),
+        new=(
+            "                elif select_data_generator:\n"
+            '                    if route_type == "aresponses" and not self._is_streaming_response(response):\n'
+            "                        from litellm.responses.streaming_iterator import CachedResponsesAPIStreamingIterator\n"
+            "\n"
+            "                        response = CachedResponsesAPIStreamingIterator(response=response, logging_obj=logging_obj)\n"
+            "                    selected_data_generator = select_data_generator(\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/10",
+    ),
 )
 
 
