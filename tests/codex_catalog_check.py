@@ -13,7 +13,7 @@ from litellm.proxy.common_utils.codex_model_catalog import (
 import copilot_auth
 
 FIXTURE = Path(__file__).parent / "fixtures" / "copilot_models.json"
-CLAUDE_CODE_ONLY = ("claude", "anthropic-")
+CLAUDE_CODE_ONLY = copilot_auth.CLAUDE_CODE_PREFIXES
 GROK_ROUTES = {
     "grok-4.7": "grok-4.7",
     "anthropic-grok-4.7": "grok-4.7",

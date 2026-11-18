@@ -59,6 +59,7 @@ MODELS_HEADERS = {
 
 ONE_MILLION = 1_000_000
 SEARCH_TOOL_NAME = "searxng-search"
+CLAUDE_CODE_PREFIXES = ("claude", "anthropic-")
 MIN_CLAUDE_VERSION = (4, 6)
 _DENY_SUBSTR = ("embedding", "trajectory", "picker", "mai-code")
 _DATED = re.compile(r"-(\d{4}-\d{2}-\d{2}|\d{4})(-preview)?$")
@@ -263,20 +264,20 @@ def _accepts_one_million(model: dict[str, Any]) -> bool:
     return limit is not None and limit >= ONE_MILLION
 
 
-def _vendor_is(model: dict[str, Any], vendor: str, id_prefixes: tuple[str, ...]) -> bool:
+def _vendor_is(model: dict[str, Any], vendor: str, id_pattern: str) -> bool:
     """Whether the model comes from a vendor, by the /models vendor field or, without it, by its id."""
     published = str(model.get("vendor") or "").lower()
-    return vendor in published if published else model["id"].lower().startswith(id_prefixes)
+    return vendor in published if published else re.match(id_pattern, model["id"].lower()) is not None
 
 
 def _is_anthropic(model: dict[str, Any]) -> bool:
     """Anthropic models run in Claude Code only."""
-    return _vendor_is(model, "anthropic", ("claude",))
+    return _vendor_is(model, "anthropic", r"claude")
 
 
 def _is_openai(model: dict[str, Any]) -> bool:
     """OpenAI and Azure OpenAI models run in Codex only."""
-    return _vendor_is(model, "openai", ("gpt-", "o1", "o3", "o4"))
+    return _vendor_is(model, "openai", r"(gpt-|o[134](-|$))")
 
 
 def _claude_code_name(model: dict[str, Any]) -> str:
@@ -303,7 +304,7 @@ def plan_routes(models: list[dict[str, Any]]) -> list[Route]:
         if not _is_openai(model):
             name = _claude_code_name(model)
             names += [name, f"{name}[1m]"] if _accepts_one_million(model) else [name]
-        if not _is_anthropic(model) and model["id"] not in names:
+        if not _is_anthropic(model) and not model["id"].lower().startswith(CLAUDE_CODE_PREFIXES):
             names.append(model["id"])
         responses = _uses_responses(model)
         routes.extend(Route(name, f"github_copilot/{model['id']}", responses) for name in names)

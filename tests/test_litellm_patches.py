@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import copilot_auth
 import litellm_patches
 
 PATCH = litellm_patches.PATCHES[0]
@@ -109,7 +110,8 @@ def test_codex_catalog_patch_leaves_out_claude_code_names(tmp_path: Path) -> Non
     target.parent.mkdir(parents=True)
     target.write_text(UPSTREAM_CODEX_CAN_DRIVE)
     assert litellm_patches.apply(patch, tmp_path) == "applied"
-    assert 'and not row.id.startswith(("claude", "anthropic-"))\n' in target.read_text()
+    prefixes = ", ".join(f'"{prefix}"' for prefix in copilot_auth.CLAUDE_CODE_PREFIXES)
+    assert f"and not row.id.startswith(({prefixes}))\n" in target.read_text()
 
 
 UPSTREAM_PLAN_BUILDERS = (

@@ -8,9 +8,9 @@ import pytest
 
 import copilot_auth
 
-FIXTURE: list[dict[str, Any]] = json.loads(
-    (Path(__file__).parent / "fixtures" / "copilot_models.json").read_text()
-)["data"]
+FIXTURE: list[dict[str, Any]] = json.loads((Path(__file__).parent / "fixtures" / "copilot_models.json").read_text())[
+    "data"
+]
 
 
 def _by_id(*model_ids: str) -> list[dict[str, Any]]:
@@ -115,22 +115,43 @@ def test_claude_code_gets_every_model_but_openai_and_codex_every_model_but_anthr
 def test_vendor_metadata_decides_which_tool_gets_a_model() -> None:
     """The /models vendor field wins over the name: an OpenAI or Azure OpenAI model gets no anthropic- name and
     an Anthropic model gets no Codex name, whatever their ids look like."""
+
     def model(model_id: str, vendor: str) -> dict[str, Any]:
         """A current chat model of one vendor."""
-        return {"id": model_id, "vendor": vendor, "model_picker_category": "versatile",
-                "capabilities": {"type": "chat"}, "policy": {"state": "enabled"}}
+        return {
+            "id": model_id,
+            "vendor": vendor,
+            "model_picker_category": "versatile",
+            "capabilities": {"type": "chat"},
+            "policy": {"state": "enabled"},
+        }
 
-    routes = _routes([model("o9-mini", "OpenAI"), model("tuned-41", "Azure OpenAI"),
-                      model("sonnet-next", "Anthropic"), model("gemini-4-argon", "Google")])
+    routes = _routes(
+        [
+            model("o9-mini", "OpenAI"),
+            model("tuned-41", "Azure OpenAI"),
+            model("sonnet-next", "Anthropic"),
+            model("gemini-4-argon", "Google"),
+        ]
+    )
     assert sorted(routes) == [
-        "anthropic-gemini-4-argon", "anthropic-sonnet-next", "gemini-4-argon", "o9-mini", "tuned-41"
+        "anthropic-gemini-4-argon",
+        "anthropic-sonnet-next",
+        "gemini-4-argon",
+        "o9-mini",
+        "tuned-41",
     ]
 
 
 def test_codex_defaults_never_pick_an_anthropic_model() -> None:
     """An Anthropic model that serves /responses is still left to Claude Code."""
-    claude = {"id": "claude-next", "vendor": "Anthropic", "model_picker_category": "powerful",
-              "capabilities": {"type": "chat"}, "supported_endpoints": ["/responses"]}
+    claude = {
+        "id": "claude-next",
+        "vendor": "Anthropic",
+        "model_picker_category": "powerful",
+        "capabilities": {"type": "chat"},
+        "supported_endpoints": ["/responses"],
+    }
     assert copilot_auth.codex_defaults([claude, *_by_id("gpt-5.4-nano")])["COPILOT_CODEX_MODEL"] == "gpt-5.4-nano"
 
 
@@ -145,8 +166,12 @@ def test_codex_defaults_pick_the_best_responses_model() -> None:
 def test_codex_defaults_prefer_newer_versions_within_a_category() -> None:
     """Within one picker category, gpt-6.1 outranks gpt-6 and gpt-5.6."""
     models = [
-        {"id": f"gpt-{version}", "model_picker_category": "powerful", "supported_endpoints": ["/responses"],
-         "capabilities": {"type": "chat", "limits": {"max_prompt_tokens": 272000}}}
+        {
+            "id": f"gpt-{version}",
+            "model_picker_category": "powerful",
+            "supported_endpoints": ["/responses"],
+            "capabilities": {"type": "chat", "limits": {"max_prompt_tokens": 272000}},
+        }
         for version in ("5.6", "6.1", "6")
     ]
     assert copilot_auth.codex_defaults(models)["COPILOT_CODEX_MODEL"] == "gpt-6.1"

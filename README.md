@@ -35,8 +35,7 @@ Which models each tool gets:
 | Claude Code | Every model except OpenAI's | `claude-sonnet-5.5`, `anthropic-gemini-4-argon`, `anthropic-grok-4.7` |
 | Codex | Every model except Anthropic's | `gpt-6-sol`, `gemini-4-argon`, `grok-4.7` |
 
-Use Claude Code for Claude models and Codex for GPT models. Passing a model
-outside a tool's list with `--model` or `-m` is unsupported.
+Passing a model outside a tool's list with `--model` or `-m` is unsupported.
 
 Each time you run `c-claude` or `c-codex`, it checks the gateway first:
 
