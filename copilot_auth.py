@@ -280,8 +280,8 @@ def _is_openai(model: dict[str, Any]) -> bool:
 
 
 def _claude_code_name(model: dict[str, Any]) -> str:
-    """Name Claude Code uses: Anthropic ids stay bare, others get the anthropic- prefix its picker lists."""
-    return model["id"] if _is_anthropic(model) else f"anthropic-{model['id']}"
+    """Name Claude Code uses: claude ids stay bare, every other id gets the anthropic- prefix its picker lists."""
+    return model["id"] if model["id"].lower().startswith("claude") else f"anthropic-{model['id']}"
 
 
 def _kept_models(models: list[dict[str, Any]]) -> list[dict[str, Any]]:

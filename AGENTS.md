@@ -88,7 +88,8 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
   - Which tool gets a model (hard rule): Claude Code gets every model except
     OpenAI's; Codex gets every model except Anthropic's. The `/models` `vendor`
     field decides. Without it, the id decides (`claude…` is Anthropic,
-    `gpt-…` and `o1`/`o3`/`o4` are OpenAI).
+    `gpt-…` and `o1`/`o3`/`o4` are OpenAI). Claude Code and Codex only list
+    their own names; a forced `--model`/`-m` outside them is unsupported.
   - Names follow from that rule:
     - Anthropic models: bare id, for Claude Code only.
     - OpenAI and Azure OpenAI models: bare id, for Codex only, with no

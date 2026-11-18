@@ -122,7 +122,9 @@ def test_vendor_metadata_decides_which_tool_gets_a_model() -> None:
 
     routes = _routes([model("o9-mini", "OpenAI"), model("tuned-41", "Azure OpenAI"),
                       model("sonnet-next", "Anthropic"), model("gemini-4-argon", "Google")])
-    assert sorted(routes) == ["anthropic-gemini-4-argon", "gemini-4-argon", "o9-mini", "sonnet-next", "tuned-41"]
+    assert sorted(routes) == [
+        "anthropic-gemini-4-argon", "anthropic-sonnet-next", "gemini-4-argon", "o9-mini", "tuned-41"
+    ]
 
 
 def test_codex_defaults_never_pick_an_anthropic_model() -> None:
