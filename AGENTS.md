@@ -247,7 +247,8 @@ receives during the call. Each result is one of:
   mentions `litellm_web_search`;
 - `PLAN`: the output contains `model_not_supported` or `requested model is not
   supported`, so the model is not in the plan;
-- `NOSEARCH`: the value was read, but no search ran;
+- `NOSEARCH`: the value was read but SearXNG got under `SMOKE_SEARCH_BYTES` during
+  the call, or the client got the raw `litellm_web_search` call;
 - `NOTOOL`: the call succeeded without the value, so the model had no working
   tools;
 - `FAIL`: anything else.
