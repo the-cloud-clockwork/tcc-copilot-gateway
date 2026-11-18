@@ -13,6 +13,7 @@ from litellm.proxy.common_utils.codex_model_catalog import (
 import copilot_auth
 
 FIXTURE = Path(__file__).parent / "fixtures" / "copilot_models.json"
+CLAUDE_CODE_ONLY = ("claude", "anthropic-")
 GROK_ROUTES = {
     "grok-4.7": "grok-4.7",
     "anthropic-grok-4.7": "grok-4.7",
@@ -45,7 +46,10 @@ def problems(entries: dict[str, dict], listed: list[CodexCatalogRow]) -> list[st
         entry = entries.get(row.id)
         upstream = (row.upstream_model or "").partition("/")[2]
         stock_slug = row.id if row.id in stock else upstream if upstream in stock else None
-        if entry is None:
+        if row.id.startswith(CLAUDE_CODE_ONLY):
+            if entry is not None:
+                found.append(f"{row.id}: served to Claude Code only, but listed for Codex")
+        elif entry is None:
             found.append(f"{row.id}: missing from the catalog")
         elif stock_slug is not None:
             if entry.get("use_responses_lite") is not False:

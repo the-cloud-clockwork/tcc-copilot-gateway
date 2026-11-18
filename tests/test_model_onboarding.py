@@ -43,12 +43,12 @@ def test_only_current_callable_chat_models_are_exposed() -> None:
 def test_responses_mode_follows_supported_endpoints() -> None:
     """Models that serve /responses route in responses mode; chat-only and unlisted endpoints do not."""
     routes = _routes()
-    assert routes["anthropic-gpt-6-luna"].responses
-    assert routes["anthropic-gpt-5.4-nano"].responses
+    assert routes["gpt-6-luna"].responses
+    assert routes["gpt-5.4-nano"].responses
     assert routes["anthropic-mai-code-2-flash"].responses
     assert not routes["claude-haiku-4.5"].responses
     assert not routes["anthropic-kimi-k3-copilot"].responses
-    assert not routes["anthropic-gpt-4.1"].responses
+    assert not routes["gpt-4.1"].responses
 
 
 def test_one_million_entries_need_a_one_million_token_prompt_limit() -> None:
@@ -63,8 +63,9 @@ def test_one_million_entries_need_a_one_million_token_prompt_limit() -> None:
 def test_models_without_metadata_use_name_rules() -> None:
     """Entries that carry only an id fall back to the name-based rules."""
     routes = _routes()
-    assert routes["anthropic-gpt-5-mini"].responses
-    assert "anthropic-gpt-5-mini[1m]" not in routes
+    assert routes["gpt-5-mini"].responses
+    assert "gpt-5-mini[1m]" not in routes
+    assert "anthropic-gpt-5-mini" not in routes
     assert "claude-sonnet-4.5" not in routes
 
 
@@ -89,20 +90,46 @@ def test_claude_defaults_fall_back_to_another_claude_family() -> None:
     }
 
 
-def test_claude_defaults_without_claude_use_the_best_other_model() -> None:
-    """A plan without any Claude model points every default at its versatile model."""
-    env = copilot_auth.claude_defaults(_by_id("gpt-6-luna", "gpt-5.4-nano", "claude-sonnet-5"))
-    assert {v for k, v in env.items() if k.startswith("ANTHROPIC_DEFAULT_")} == {"anthropic-gpt-5.4-nano"}
-    assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "272000"
+def test_claude_defaults_without_claude_use_the_best_model_claude_code_may_run() -> None:
+    """A plan without any Claude model points every default at its best non-OpenAI model, and gets no default
+    when only OpenAI models are left."""
+    env = copilot_auth.claude_defaults(_by_id("gpt-6-luna", "gpt-5.4-nano", "kimi-k3-copilot", "claude-sonnet-5"))
+    assert {v for k, v in env.items() if k.startswith("ANTHROPIC_DEFAULT_")} == {"anthropic-kimi-k3-copilot"}
+    assert copilot_auth.claude_defaults(_by_id("gpt-6-luna", "gpt-5.4-nano")) == {}
 
 
-def test_non_claude_models_also_route_by_their_own_id() -> None:
-    """Codex and OpenAI clients reach non-Claude models by their Copilot id as well as the anthropic- name."""
+def test_claude_code_gets_every_model_but_openai_and_codex_every_model_but_anthropic() -> None:
+    """Anthropic models keep their id for Claude Code only, OpenAI models keep their id for Codex only, and every
+    other vendor's model is served as anthropic-<id> for Claude Code and as <id> for Codex."""
     routes = _routes()
-    assert routes["gpt-6-luna"].target == "github_copilot/gpt-6-luna"
-    assert routes["gpt-6-luna"].responses
-    assert routes["kimi-k3-copilot"].target == "github_copilot/kimi-k3-copilot"
-    assert [name for name in routes if routes[name].target == "github_copilot/claude-haiku-4.5"] == ["claude-haiku-4.5"]
+    names_by_target: dict[str, list[str]] = {}
+    for name, route in routes.items():
+        names_by_target.setdefault(route.target.removeprefix("github_copilot/"), []).append(name)
+    assert names_by_target["claude-haiku-4.5"] == ["claude-haiku-4.5"]
+    assert names_by_target["gpt-6-luna"] == ["gpt-6-luna"]
+    assert names_by_target["gpt-4.1"] == ["gpt-4.1"]
+    assert names_by_target["kimi-k3-copilot"] == ["anthropic-kimi-k3-copilot", "kimi-k3-copilot"]
+    assert not any(name.startswith("anthropic-gpt") for name in routes)
+
+
+def test_vendor_metadata_decides_which_tool_gets_a_model() -> None:
+    """The /models vendor field wins over the name: an OpenAI or Azure OpenAI model gets no anthropic- name and
+    an Anthropic model gets no Codex name, whatever their ids look like."""
+    def model(model_id: str, vendor: str) -> dict[str, Any]:
+        """A current chat model of one vendor."""
+        return {"id": model_id, "vendor": vendor, "model_picker_category": "versatile",
+                "capabilities": {"type": "chat"}, "policy": {"state": "enabled"}}
+
+    routes = _routes([model("o9-mini", "OpenAI"), model("tuned-41", "Azure OpenAI"),
+                      model("sonnet-next", "Anthropic"), model("gemini-4-argon", "Google")])
+    assert sorted(routes) == ["anthropic-gemini-4-argon", "gemini-4-argon", "o9-mini", "sonnet-next", "tuned-41"]
+
+
+def test_codex_defaults_never_pick_an_anthropic_model() -> None:
+    """An Anthropic model that serves /responses is still left to Claude Code."""
+    claude = {"id": "claude-next", "vendor": "Anthropic", "model_picker_category": "powerful",
+              "capabilities": {"type": "chat"}, "supported_endpoints": ["/responses"]}
+    assert copilot_auth.codex_defaults([claude, *_by_id("gpt-5.4-nano")])["COPILOT_CODEX_MODEL"] == "gpt-5.4-nano"
 
 
 def test_codex_defaults_pick_the_best_responses_model() -> None:
