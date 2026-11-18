@@ -28,6 +28,15 @@ Linux), `git`, `curl`, `openssl`, and Claude Code (`claude`) or Codex
    c-codex         # Codex on Copilot
    ```
 
+Which models each tool gets:
+
+| Tool | Models | Example names |
+|---|---|---|
+| Claude Code | Every model except OpenAI's | `claude-sonnet-5.5`, `anthropic-gemini-4-argon`, `anthropic-grok-4.7` |
+| Codex | Every model except Anthropic's | `gpt-6-sol`, `gemini-4-argon`, `grok-4.7` |
+
+Passing a model outside a tool's list with `--model` or `-m` is unsupported.
+
 Each time you run `c-claude` or `c-codex`, it checks the gateway first:
 
 | Gateway | What happens |
@@ -134,11 +143,17 @@ You never edit a model list. On every start, the gateway reads GitHub's live
 - **Which API:** a model that serves `/responses` (GPT-5.x, GPT-6 and Codex
   models) routes in responses mode. Claude models use Copilot's native
   `/v1/messages` through LiteLLM.
-- **Names:** Claude models keep their ids (`claude-haiku-4.5`). Every other
-  model is served twice: under an `anthropic-` prefix (`anthropic-gpt-6-luna`),
-  because Claude Code's `/model` picker only lists names that start with
-  `claude` or `anth`, and under its own id (`gpt-6-luna`) for Codex and OpenAI
-  clients.
+- **Names:** the vendor in Copilot's `/models` metadata decides the names. A
+  model without a vendor is judged by its id (`claude…` or `gpt-…`).
+  - Anthropic models are for Claude Code only: a `claude…` id stays as it is
+    (`claude-haiku-4.5`), any other id becomes `anthropic-<id>`.
+    Codex's model catalog leaves them out.
+  - OpenAI and Azure OpenAI models keep their ids (`gpt-6-luna`), for Codex
+    only. They get no `anthropic-` name, so Claude Code's `/model` picker, which
+    lists only names that start with `claude` or `anth`, does not show them.
+  - Every other model is served twice: as `anthropic-<id>`
+    (`anthropic-gemini-4-argon`) for Claude Code and as `<id>`
+    (`gemini-4-argon`) for Codex.
 - **Context window:** Copilot enforces its own prompt limits, often far below a
   model's native window: `claude-sonnet-5` accepts 200k prompt tokens there.
   Claude Code cannot see those limits. It assumes 1M for Sonnet 5 and later,
@@ -153,9 +168,10 @@ You never edit a model list. On every start, the gateway reads GitHub's live
   limit as Codex's `model_context_window`.
 - **Defaults:** the newest Opus, Sonnet and Haiku become Claude Code's
   `ANTHROPIC_DEFAULT_*_MODEL`. A plan without one of those families falls back
-  to another Claude family, and a plan without Claude falls back to its best
-  other model. Codex gets the highest picker category among Responses models,
-  preferring codex models, then the newest version.
+  to another Claude family. A plan without Claude falls back to its best
+  non-OpenAI model, and gets no default when it has none. Codex gets the
+  highest picker category among non-Anthropic Responses models, preferring
+  codex models, then the newest version.
 
 ## Web search
 

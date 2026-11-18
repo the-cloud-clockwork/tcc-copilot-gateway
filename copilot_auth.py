@@ -59,6 +59,7 @@ MODELS_HEADERS = {
 
 ONE_MILLION = 1_000_000
 SEARCH_TOOL_NAME = "searxng-search"
+CLAUDE_CODE_PREFIXES = ("claude", "anthropic-")
 MIN_CLAUDE_VERSION = (4, 6)
 _DENY_SUBSTR = ("embedding", "trajectory", "picker", "mai-code")
 _DATED = re.compile(r"-(\d{4}-\d{2}-\d{2}|\d{4})(-preview)?$")
@@ -263,9 +264,25 @@ def _accepts_one_million(model: dict[str, Any]) -> bool:
     return limit is not None and limit >= ONE_MILLION
 
 
-def _public_name(model_id: str) -> str:
-    """Name clients use: Claude ids stay bare, others get the anthropic- prefix Claude Code's picker lists."""
-    return model_id if model_id.startswith(("claude", "anthropic")) else f"anthropic-{model_id}"
+def _vendor_is(model: dict[str, Any], vendor: str, id_pattern: str) -> bool:
+    """Whether the model comes from a vendor, by the /models vendor field or, without it, by its id."""
+    published = str(model.get("vendor") or "").lower()
+    return vendor in published if published else re.match(id_pattern, model["id"].lower()) is not None
+
+
+def _is_anthropic(model: dict[str, Any]) -> bool:
+    """Anthropic models run in Claude Code only."""
+    return _vendor_is(model, "anthropic", r"claude")
+
+
+def _is_openai(model: dict[str, Any]) -> bool:
+    """OpenAI and Azure OpenAI models run in Codex only."""
+    return _vendor_is(model, "openai", r"(gpt-|o[134](-|$))")
+
+
+def _claude_code_name(model: dict[str, Any]) -> str:
+    """Name Claude Code uses: claude ids stay bare, every other id gets the anthropic- prefix its picker lists."""
+    return model["id"] if model["id"].lower().startswith("claude") else f"anthropic-{model['id']}"
 
 
 def _kept_models(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -277,15 +294,17 @@ def _kept_models(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def plan_routes(models: list[dict[str, Any]]) -> list[Route]:
     """Turn a /models payload into LiteLLM routes.
 
-    Each model gets its public name, a [1m] entry when it accepts a 1M token prompt,
-    and, for non-Claude models, its bare Copilot id so Codex and OpenAI clients can
-    use the name they already know.
+    Claude Code gets every model except OpenAI's, under its Claude Code name and a
+    [1m] entry when the model accepts a 1M token prompt. Codex gets every model
+    except Anthropic's, under its bare Copilot id.
     """
     routes: list[Route] = []
     for model in _kept_models(models):
-        public = _public_name(model["id"])
-        names = [public, f"{public}[1m]"] if _accepts_one_million(model) else [public]
-        if public != model["id"]:
+        names: list[str] = []
+        if not _is_openai(model):
+            name = _claude_code_name(model)
+            names += [name, f"{name}[1m]"] if _accepts_one_million(model) else [name]
+        if not _is_anthropic(model) and not model["id"].lower().startswith(CLAUDE_CODE_PREFIXES):
             names.append(model["id"])
         responses = _uses_responses(model)
         routes.extend(Route(name, f"github_copilot/{model['id']}", responses) for name in names)
@@ -318,13 +337,13 @@ def claude_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
     """Claude Code environment for this plan: the Opus, Sonnet and Haiku defaults and the auto-compact window.
 
     Each family gets its newest kept model; a missing family falls back to another
-    Claude family, and a plan with no Claude model falls back to its first model by
-    picker category. The auto-compact window is the smaller published prompt limit
+    Claude family, and a plan with no Claude model falls back to its first non-OpenAI
+    model by picker category. The auto-compact window is the smaller published prompt limit
     of the Opus and Sonnet defaults, kept within Claude Code's 100k to 1M range,
     because Claude Code cannot see the lower limits Copilot enforces.
     """
-    chosen = _default_models(_kept_models(models))
-    env = {f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL": _public_name(m["id"]) for family, m in chosen.items()}
+    chosen = _default_models([model for model in _kept_models(models) if not _is_openai(model)])
+    env = {f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL": _claude_code_name(m) for family, m in chosen.items()}
     limits = [limit for family in ("opus", "sonnet") if family in chosen if (limit := _prompt_limit(chosen[family]))]
     if limits:
         env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = str(min(max(min(limits), 100_000), ONE_MILLION))
@@ -348,8 +367,8 @@ def _codex_rank(model: dict[str, Any]) -> tuple[int, bool, tuple[int, int, int]]
 
 
 def codex_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
-    """Codex environment for this plan: the best kept /responses model and its published prompt limit."""
-    candidates = [model for model in _kept_models(models) if _uses_responses(model)]
+    """Codex environment for this plan: the best kept non-Anthropic /responses model and its prompt limit."""
+    candidates = [model for model in _kept_models(models) if _uses_responses(model) and not _is_anthropic(model)]
     if not candidates:
         return {}
     best = min(candidates, key=_codex_rank)

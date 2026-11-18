@@ -108,7 +108,7 @@ while IFS= read -r model; do
   if [[ "$TOOLS" != codex && ( "$model" == claude* || "$model" == anthropic-* ) ]]; then
     run_call claude "$model"
   fi
-  if [[ "$TOOLS" != claude && "$model" != anthropic-* && "$model" != *"[1m]"* ]]; then
+  if [[ "$TOOLS" != claude && "$model" != claude* && "$model" != anthropic-* ]]; then
     run_call codex "$model"
   fi
 done <<< "$models"

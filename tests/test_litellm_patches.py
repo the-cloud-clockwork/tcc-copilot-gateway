@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import copilot_auth
 import litellm_patches
 
 PATCH = litellm_patches.PATCHES[0]
@@ -80,7 +81,11 @@ UPSTREAM_CODEX_CATALOG = (
 
 def test_codex_catalog_patches_keep_tools_in_the_tool_list_and_drop_grok_sub_agents(tmp_path: Path) -> None:
     """Stock entries turn responses-lite off, and fallback entries for grok disable the multi-agent namespace."""
-    patches = [p for p in litellm_patches.PATCHES if p.path == "litellm/proxy/common_utils/codex_model_catalog.py"]
+    patches = [
+        p
+        for p in litellm_patches.PATCHES
+        if p.path == "litellm/proxy/common_utils/codex_model_catalog.py" and p.upstream.endswith("/issues/13")
+    ]
     target = tmp_path / patches[0].path
     target.parent.mkdir(parents=True)
     target.write_text(UPSTREAM_CODEX_CATALOG)
@@ -90,6 +95,23 @@ def test_codex_catalog_patches_keep_tools_in_the_tool_list_and_drop_grok_sub_age
     assert '    multi_agent_version: Literal["disabled"] | None = None\n    context_window: int | None\n' in text
     assert 'multi_agent_version="disabled" if "grok" in (row.upstream_model or row.id) else None,\n        )' in text
     assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["already applied"] * 3
+
+
+UPSTREAM_CODEX_CAN_DRIVE = (
+    "def _codex_can_drive(row: CodexCatalogRow) -> bool:\n"
+    '    return "*" not in row.id and (row.mode is None or row.mode in CODEX_CHAT_MODES)\n'
+)
+
+
+def test_codex_catalog_patch_leaves_out_claude_code_names(tmp_path: Path) -> None:
+    """Codex's catalog never lists the claude* and anthropic-* names served to Claude Code."""
+    patch = next(p for p in litellm_patches.PATCHES if p.upstream.endswith("/pull/21"))
+    target = tmp_path / patch.path
+    target.parent.mkdir(parents=True)
+    target.write_text(UPSTREAM_CODEX_CAN_DRIVE)
+    assert litellm_patches.apply(patch, tmp_path) == "applied"
+    prefixes = ", ".join(f'"{prefix}"' for prefix in copilot_auth.CLAUDE_CODE_PREFIXES)
+    assert f"and not row.id.startswith(({prefixes}))\n" in target.read_text()
 
 
 UPSTREAM_PLAN_BUILDERS = (

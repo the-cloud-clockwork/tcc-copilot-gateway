@@ -131,6 +131,18 @@ PATCHES = (
         ),
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/17",
     ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old='    return "*" not in row.id and (row.mode is None or row.mode in CODEX_CHAT_MODES)\n',
+        new=(
+            "    return (\n"
+            '        "*" not in row.id\n'
+            '        and not row.id.startswith(("claude", "anthropic-"))\n'
+            "        and (row.mode is None or row.mode in CODEX_CHAT_MODES)\n"
+            "    )\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/pull/21",
+    ),
 )
 
 
