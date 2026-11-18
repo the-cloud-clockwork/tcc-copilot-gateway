@@ -20,6 +20,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK_FILE=smoke-check.txt
 PROMPT="Read the file $CHECK_FILE in the current directory with your tools, then use your web search tool to find the latest LiteLLM release. Reply with the file's exact content on the first line and the release on the second line."
 CALL_TIMEOUT="${SMOKE_TIMEOUT:-300}"
+SEARCH_BYTES="${SMOKE_SEARCH_BYTES:-10000}"
 # shellcheck disable=SC2016
 WRAP='. "$COPILOT_GATEWAY_DIR/shell/cc-copilot.sh" && "$0" "$@"'
 
@@ -28,6 +29,10 @@ export COPILOT_GATEWAY_PORT="${COPILOT_GATEWAY_PORT:-4000}"
 export COPILOT_TOKEN_DIR="${COPILOT_TOKEN_DIR:-$HOME/.config/litellm/github_copilot}"
 : "${LITELLM_MASTER_KEY:?open a terminal after setup.sh, or export the gateway key}"
 : "${SEARXNG_SECRET:?open a terminal after setup.sh, or export the SearXNG secret}"
+if [[ ! "$SEARCH_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "SMOKE_SEARCH_BYTES must be a whole number of bytes." >&2
+  exit 1
+fi
 # shellcheck source=shell/cc-copilot.sh
 . "$COPILOT_GATEWAY_DIR/shell/cc-copilot.sh"
 
@@ -59,11 +64,14 @@ fi
 
 classify() {
   local status="$1" log="$2" token="$3" searched="$4"
-  if [[ "$status" == 0 ]] && grep -qF "$token" "$log" && [[ "$searched" -gt 0 ]]; then
+  if [[ ! "$searched" =~ ^[0-9]+$ ]]; then
+    echo "FAIL"
+  elif [[ "$status" == 0 ]] && grep -qF "$token" "$log" && [[ "$searched" -ge "$SEARCH_BYTES" ]] \
+    && ! grep -q 'litellm_web_search' "$log"; then
     echo "PASS"
   elif [[ "$status" != 0 ]] && grep -qiE 'model_not_supported|requested model is not supported' "$log"; then
     echo "PLAN"
-  elif [[ "$status" == 0 ]] && grep -qF "$token" "$log"; then
+  elif grep -q 'litellm_web_search' "$log" || { [[ "$status" == 0 ]] && grep -qF "$token" "$log"; }; then
     echo "NOSEARCH"
   elif [[ "$status" == 0 ]]; then
     echo "NOTOOL"
@@ -74,14 +82,26 @@ classify() {
 
 detail() {
   case "$1" in
-    NOSEARCH) echo "the check file was read, but SearXNG got no traffic during the call" ;;
+    NOSEARCH)
+      if grep -q 'litellm_web_search' "$2"; then
+        echo "the client got the raw litellm_web_search call, so no search ran"
+      else
+        echo "the check file was read, but SearXNG got only $3 bytes during the call (need $SEARCH_BYTES)"
+      fi
+      ;;
     NOTOOL) echo "the answer does not hold the value from $CHECK_FILE" ;;
-    *) grep -iE 'error|exception|status|not supported|invalid|unexpected' "$2" | head -n 1 | cut -c 1-240 | tr '\t' ' ' ;;
+    *)
+      if [[ ! "$3" =~ ^[0-9]+$ ]]; then
+        echo "could not read the SearXNG traffic counter during the call"
+      else
+        grep -iE 'error|exception|status|not supported|invalid|unexpected' "$2" | head -n 1 | cut -c 1-240 | tr '\t' ' '
+      fi
+      ;;
   esac
 }
 
 run_call() {
-  local tool="$1" model="$2" log start status result seconds token before searched
+  local tool="$1" model="$2" log start status result seconds token before after searched
   log="$OUT/calls/$tool-${model//[^A-Za-z0-9._-]/_}.log"
   token="PONG-$(od -An -N4 -tu4 /dev/urandom | tr -d ' \n')"
   printf '%s\n' "$token" > "$OUT/work/$CHECK_FILE"
@@ -97,10 +117,15 @@ run_call() {
       -m "$model" "$PROMPT") > "$log" 2>&1 < /dev/null
   fi
   status=$?
-  searched=$(($(searxng_bytes) - before))
+  after="$(searxng_bytes)"
+  if [[ "$before" =~ ^[0-9]+$ && "$after" =~ ^[0-9]+$ && "$after" -ge "$before" ]]; then
+    searched=$((after - before))
+  else
+    searched=unknown
+  fi
   seconds=$(($(date +%s) - start))
   result="$(classify "$status" "$log" "$token" "$searched")"
-  printf '%s\t%s\t%s\t%s\t%s\n' "$tool" "$model" "$result" "$seconds" "$([[ "$result" == PASS ]] || detail "$result" "$log")" >> "$OUT/results.tsv"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$tool" "$model" "$result" "$seconds" "$([[ "$result" == PASS ]] || detail "$result" "$log" "$searched")" >> "$OUT/results.tsv"
   printf '%-6s %-8s %4ss  %s\n' "$tool" "$result" "$seconds" "$model"
 }
 
