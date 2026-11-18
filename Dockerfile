@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY requirements.txt litellm_patches.py ./
 RUN pip install -r requirements.txt && python litellm_patches.py
-COPY copilot_auth.py entrypoint.sh ./
+COPY ca_bundle.py copilot_auth.py entrypoint.sh ./
 
 EXPOSE 4000
 ENTRYPOINT ["/app/entrypoint.sh"]

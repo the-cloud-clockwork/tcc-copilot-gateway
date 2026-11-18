@@ -66,6 +66,7 @@ cat > "$HOME/bin/docker" <<'FAKE'
 #!/bin/sh
 case "$*" in
   *"ps --status running --quiet gateway"*) [ -f "$HOME/.fake-gateway" ] && echo fake-gateway ;;
+  *" up "*) touch "$HOME/.fake-gateway" ;;
   *" logs "*) cat "$HOME/fake-logs.txt" 2> /dev/null ;;
 esac
 exit 0
@@ -101,7 +102,13 @@ grep -q -- 'wire_api="responses"' <<< "$codex_line" || fail "c-codex does not us
 grep -q -- 'model_provider=copilot-gateway' <<< "$codex_line" || fail "c-codex does not select the gateway provider"
 printf '%s\n' '  │  Code:  ABCD-1234                           │' \
   '  │  URL :  https://my-company.ghe.com/login/device│' > "$HOME/fake-logs.txt"
-detached_out="$(alias_run 'cc-copilot -d')"
+cat > "$HOME/bin/powershell.exe" <<'FAKE'
+#!/bin/sh
+printf '%s\r\n' '-----BEGIN CERTIFICATE-----' 'TESTWINDOWSROOT' '-----END CERTIFICATE-----'
+FAKE
+chmod +x "$HOME/bin/powershell.exe"
+printf '%s\n' '-----BEGIN CERTIFICATE-----' 'TESTCAFILE' '-----END CERTIFICATE-----' > "$HOME/corp-ca.pem"
+detached_out="$(alias_run "export COPILOT_CA_FILE='$HOME/corp-ca.pem'; cc-copilot -d")"
 grep -q 'Code:  ABCD-1234' <<< "$detached_out" || fail "cc-copilot -d did not show the device code"
 grep -q 'COPILOT GATEWAY READY' <<< "$detached_out" || fail "cc-copilot -d did not print the ready banner"
 for _ in 1 2 3 4 5; do
@@ -110,6 +117,19 @@ for _ in 1 2 3 4 5; do
 done
 [[ "$(cat "$HOME/opened-url" 2> /dev/null)" == "https://my-company.ghe.com/login/device" ]] \
   || fail "cc-copilot -d did not open the device login page"
+host_ca="$REPO/state/host-ca.pem"
+grep -q 'TESTCAFILE' "$host_ca" 2> /dev/null || fail "cc-copilot -d did not add COPILOT_CA_FILE to the gateway's trust"
+grep -q 'TESTWINDOWSROOT' "$host_ca" || fail "cc-copilot -d did not add the Windows root certificates"
+if grep -q $'\r' "$host_ca"; then
+  fail "the Windows root certificates kept their carriage returns"
+fi
+[[ "$(grep -c 'BEGIN CERTIFICATE' "$host_ca")" -gt 2 ]] || fail "cc-copilot -d did not add the system CA bundle"
+rm -f "$host_ca" "$HOME/.fake-gateway"
+alias_run c-claude > /dev/null
+grep -q 'TESTWINDOWSROOT' "$host_ca" 2> /dev/null || fail "c-claude did not refresh the gateway's trust when it started the gateway"
+rm -f "$host_ca" "$HOME/.fake-gateway"
+alias_run cc-copilot > /dev/null
+grep -q 'TESTWINDOWSROOT' "$host_ca" 2> /dev/null || fail "attached cc-copilot did not refresh the gateway's trust"
 kill "$fake"
 wait "$fake" 2> /dev/null || true
 rm -f "$HOME/.fake-gateway"

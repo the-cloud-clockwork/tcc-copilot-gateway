@@ -118,9 +118,24 @@ def sanity_check(access_token: str) -> tuple[bool, list[dict[str, Any]], dict | 
         api_base = info.get("endpoints", {}).get("api", DEFAULT_API_BASE)
         models = list_models(info["token"], api_base)
         return (bool(models), models, info)
+    except httpx.TransportError:
+        raise
     except Exception as e:  # noqa: BLE001
         _log(f"  sanity check failed: {e}")
         return (False, [], None)
+
+
+def network_hint(error: httpx.TransportError) -> str:
+    """Explain a network failure on a GitHub or Copilot call; the saved GitHub login stays valid."""
+    host = error.request.url.host
+    if "CERTIFICATE_VERIFY_FAILED" in str(error):
+        return (
+            f"✗ {host}: the HTTPS certificate is not trusted ({error}).\n"
+            "  Your network inspects HTTPS with its own root certificate. The gateway trusts the certificates\n"
+            "  your computer trusts; when this repeats, save your company's root CA as a PEM file, set\n"
+            "  COPILOT_CA_FILE to its path and run cc-copilot -d."
+        )
+    return f"✗ Can't reach {host} ({error}). Check the network and run cc-copilot -d."
 
 
 def open_browser(url: str) -> None:
@@ -400,6 +415,17 @@ def _report(models: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     """Validate or refresh the Copilot token, then write config.yaml and defaults.env from the live model list."""
+    try:
+        return _refresh()
+    except httpx.TransportError as e:
+        _log(network_hint(e))
+        if read_access_token():
+            _log("  Your GitHub login is kept; the next start reuses it.")
+        return 1
+
+
+def _refresh() -> int:
+    """Reuse the saved token when it can list models, otherwise run the device flow, then write the config."""
     _log(f"Token dir: {TOKEN_DIR}")
     token = read_access_token()
 
@@ -413,10 +439,12 @@ def main() -> int:
             _report(models)
             return 0
         _log("✗ Token can't fetch models — re-authenticating.")
+        ACCESS_TOKEN_FILE.unlink(missing_ok=True)
     else:
         _log("No token found — authenticating.")
 
     token = device_flow()
+    save_tokens(token, None)
     ok, models, info = sanity_check(token)
     if not ok:
         _log("✗ Authenticated but still can't fetch models (policy/entitlement/proxy?). See README.")
