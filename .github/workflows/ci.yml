@@ -66,6 +66,9 @@ jobs:
         run: |
           docker run --rm --entrypoint python tcc-copilot-gateway:local -c \
             'import litellm.proxy.common_request_processing, litellm.integrations.websearch_interception.handler'
+      - name: Codex catalog keeps tools in the request's tool list and gives grok no sub-agent namespace
+        run: |
+          docker run --rm -v "$PWD/tests:/tests:ro" --entrypoint python tcc-copilot-gateway:local /tests/codex_catalog_check.py
       - name: Gateway image builds its CA bundle from the host certificates
         run: |
           mkdir -p /tmp/ca-state
