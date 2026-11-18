@@ -61,3 +61,32 @@ def test_responses_stream_patch_replays_a_finished_response_as_a_stream(tmp_path
     assert 'and not self.data.get("background")' in text
     assert "response = CachedResponsesAPIStreamingIterator(\n" in text
     assert text.index("CachedResponsesAPIStreamingIterator(") < text.index("selected_data_generator = select_data_generator(")
+
+
+UPSTREAM_CODEX_CATALOG = (
+    "    experimental_supported_tools: tuple[()] = ()\n"
+    "    context_window: int | None\n"
+    "    base_instructions: str\n"
+    "        return CodexFallbackModel(\n"
+    "            context_window=row.max_input_tokens,\n"
+    "            base_instructions=instructions,\n"
+    "        )\n"
+    "    listing: Final = {\n"
+    '        "supported_in_api": True,\n'
+    '        "upgrade": upgrade,\n'
+    "    }\n"
+)
+
+
+def test_codex_catalog_patches_keep_tools_in_the_tool_list_and_drop_grok_sub_agents(tmp_path: Path) -> None:
+    """Stock entries turn responses-lite off, and fallback entries for grok disable the multi-agent namespace."""
+    patches = [p for p in litellm_patches.PATCHES if p.path == "litellm/proxy/common_utils/codex_model_catalog.py"]
+    target = tmp_path / patches[0].path
+    target.parent.mkdir(parents=True)
+    target.write_text(UPSTREAM_CODEX_CATALOG)
+    assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["applied"] * 3
+    text = target.read_text()
+    assert '        "upgrade": upgrade,\n        "use_responses_lite": False,\n    }\n' in text
+    assert '    multi_agent_version: Literal["disabled"] | None = None\n    context_window: int | None\n' in text
+    assert 'multi_agent_version="disabled" if "grok" in (row.upstream_model or row.id) else None,\n        )' in text
+    assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["already applied"] * 3

@@ -57,6 +57,33 @@ PATCHES = (
         ),
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/10",
     ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old='        "supported_in_api": True,\n        "upgrade": upgrade,\n    }\n',
+        new='        "supported_in_api": True,\n        "upgrade": upgrade,\n        "use_responses_lite": False,\n    }\n',
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/13",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="    experimental_supported_tools: tuple[()] = ()\n    context_window: int | None\n",
+        new=(
+            "    experimental_supported_tools: tuple[()] = ()\n"
+            '    multi_agent_version: Literal["disabled"] | None = None\n'
+            "    context_window: int | None\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/13",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="            context_window=row.max_input_tokens,\n            base_instructions=instructions,\n        )\n",
+        new=(
+            "            context_window=row.max_input_tokens,\n"
+            "            base_instructions=instructions,\n"
+            '            multi_agent_version="disabled" if "grok" in (row.upstream_model or row.id) else None,\n'
+            "        )\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/13",
+    ),
 )
 
 

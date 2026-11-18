@@ -169,6 +169,17 @@ patch twice is a no-op.
    `CachedResponsesAPIStreamingIterator`. Background requests are skipped
    (issue #10). Without it, Codex on chat-mode models fails with
    `'ResponsesAPIResponse' object has no attribute '__aiter__'`.
+3. `proxy/common_utils/codex_model_catalog.py`, the Codex catalog LiteLLM
+   serves on `/v1/models?client_version=` (issue #13):
+   - Stock entries get `use_responses_lite: false`. Codex 0.169 otherwise sends
+     the tools of gpt-5.6/gpt-6 models in an `additional_tools` input item with
+     no `web_search`, so they cannot search.
+   - Fallback entries get `multi_agent_version`, `disabled` for grok. Copilot's
+     grok provider rejects the `namespace` tool type (`multi_agent_v1`) with 400
+     `upstream_request_rejected`, so Codex on grok has no sub-agents.
+
+   CI runs `tests/codex_catalog_check.py` in the built image against this
+   catalog.
 
 ## Testing
 
