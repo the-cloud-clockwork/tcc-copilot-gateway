@@ -112,9 +112,57 @@ def builder_problems() -> list[str]:
     return found
 
 
+class ReplayLogging:
+    """The few logging calls the stream replay makes, as no-ops."""
+
+    def __init__(self) -> None:
+        self.model_call_details: dict = {}
+
+    def __getattr__(self, name: str) -> object:
+        """Every other logging method does nothing."""
+        return lambda *args, **kwargs: None
+
+
+def stream_problems() -> list[str]:
+    """What is wrong when the Responses override is replayed as an event stream, as Codex receives it."""
+    from litellm.responses.streaming_iterator import CachedResponsesAPIStreamingIterator
+
+    response = ResponsesAPIResponse(
+        id="resp_3",
+        created_at=0,
+        model="m",
+        object="response",
+        status="completed",
+        output=[
+            {"type": "function_call", "id": "fc_5", "call_id": "e1", "name": "exec_command", "arguments": "{}"},
+            {"type": "function_call", "id": "fc_6", "call_id": "s1", "name": "litellm_web_search",
+             "arguments": SEARCH_ARGUMENTS},
+        ],
+    )
+    override = asyncio.run(websearch_mixed.responses_override(Interceptor(), response, SEARCH_CALLS, {}))
+
+    async def replay() -> list[tuple[str, object]]:
+        """Every event type with the type of its item."""
+        events = []
+        async for event in CachedResponsesAPIStreamingIterator(response=override, logging_obj=ReplayLogging()):
+            item = getattr(event, "item", None)
+            item_type = item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
+            events.append((str(getattr(event, "type", "")).rsplit(".", 1)[-1].lower(), item_type))
+        return events
+
+    events = asyncio.run(replay())
+    added = [item for kind, item in events if kind.endswith("output_item_added")]
+    found = [] if added == ["message", "function_call"] else [f"stream: items added {added}"]
+    if not any(kind.endswith("output_text_delta") for kind, _ in events):
+        found.append("stream: no text delta for the search results")
+    if not events or not events[-1][0].endswith("response_completed"):
+        found.append(f"stream: last event {events[-1] if events else None}")
+    return found
+
+
 def main() -> int:
     """Print every problem and exit 1 when there is one."""
-    found = responses_problems() + chat_problems() + builder_problems()
+    found = responses_problems() + chat_problems() + builder_problems() + stream_problems()
     for line in found:
         print(line)
     print(f"{len(found)} problems")
