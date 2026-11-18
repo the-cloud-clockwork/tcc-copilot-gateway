@@ -40,3 +40,23 @@ def test_patch_refuses_a_moved_snippet(tmp_path: Path) -> None:
     root = _tree(tmp_path, "query = something_else()\n")
     with pytest.raises(SystemExit):
         litellm_patches.apply(PATCH, root)
+
+
+UPSTREAM_STREAM_BRANCH = (
+    "                elif select_data_generator:\n"
+    "                    selected_data_generator = select_data_generator(\n"
+    "                        response=response,\n"
+)
+
+
+def test_responses_stream_patch_replays_a_finished_response_as_a_stream(tmp_path: Path) -> None:
+    """On /v1/responses a non-streaming response to a streaming request is replayed as an event stream."""
+    patch = next(p for p in litellm_patches.PATCHES if p.path == "litellm/proxy/common_request_processing.py")
+    target = tmp_path / patch.path
+    target.parent.mkdir(parents=True)
+    target.write_text(f"before\n{UPSTREAM_STREAM_BRANCH}after\n")
+    assert litellm_patches.apply(patch, tmp_path) == "applied"
+    text = target.read_text()
+    assert 'if route_type == "aresponses" and not self._is_streaming_response(response):' in text
+    assert "response = CachedResponsesAPIStreamingIterator(response=response, logging_obj=logging_obj)" in text
+    assert text.index("CachedResponsesAPIStreamingIterator(") < text.index("selected_data_generator = select_data_generator(")
