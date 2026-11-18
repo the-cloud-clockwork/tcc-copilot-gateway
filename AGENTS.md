@@ -15,13 +15,15 @@ at `http://localhost:4000`, in both API shapes:
 The user installs it once with `setup.sh`. After that, `c-claude` and `c-codex`
 in any new terminal start the stack when it is down and launch the tool against
 it. Plain `claude` and `codex` are never changed. Nothing is deployed; this is a
-workstation tool.
+local developer tool.
 
 ## Hard rules
 
-- **No employer names.** The repository must never contain the name of the
-  operator's former or current employer, or of their teams. Check with
-  `git grep -niE '<names>'` before every commit.
+- **No personal details.** The files and everything published around them
+  (issues, pull requests, comments, commits) never name a person, employer or
+  team. They never say which computer, network or subscription plan something
+  ran on, and never show local paths, hostnames or usernames. See "Issues, pull
+  requests and commits".
 - **LiteLLM is pinned.** The exact pin is `litellm[proxy]==1.106.2`, because
   LiteLLM was compromised on PyPI twice in 2026 (the README supply-chain notice
   has the details). Never loosen it to a range. Change it only by pull request,
@@ -31,7 +33,7 @@ workstation tool.
   RC files or the Copilot token folder. Pass the key by reference:
   `printf 'Authorization: Bearer %s\n' "$LITELLM_MASTER_KEY" | curl -H @- ...`.
 - **Branches.** `dev` is the working branch. Changes land by pull request into
-  `dev` with CI green and review closed. `main` is moved only by the operator.
+  `dev` with CI green and review closed. `main` is moved only by a maintainer.
 - **Code style.** No comments in code (docstrings and one file header only), full
   type annotations on Python functions, `ruff` clean, shellcheck clean. Shell
   sourced by users must work in bash 3.2, bash 5 and zsh.
@@ -182,7 +184,7 @@ patch twice is a no-op.
 
 ## Testing
 
-Tests run in CI, not on the workstation. Lint and shellcheck may run locally:
+Tests run in CI, not locally. Lint and shellcheck may run locally:
 
 ```bash
 shellcheck setup.sh entrypoint.sh shell/cc-copilot.sh tests/*.sh scripts/*.sh
@@ -243,7 +245,7 @@ Output goes to
 - `calls/<tool>-<model>.log`: the full output of each call;
 - `gateway.log`: the LiteLLM log for the run.
 
-To run it as an agent without the operator's key, export a throwaway key and
+To run it as an agent without the user's key, export a throwaway key and
 secret (`LITELLM_MASTER_KEY=sk-<random>`, `SEARXNG_SECRET=<random>`) together
 with `COPILOT_TOKEN_DIR`. Stop any gateway started with another key first
 (`cc-copilot --stop`). Otherwise the script finds the gateway running but never
@@ -259,6 +261,49 @@ printf 'Authorization: Bearer %s\n' "$LITELLM_MASTER_KEY" \
 
 Vary `stream`, `tools` and `reasoning` one at a time to isolate a failure.
 Claude Code uses `/v1/messages` and Codex uses `/v1/responses`.
+
+## Issues, pull requests and commits
+
+Everything published to the repository host is public: issue and pull request
+titles and bodies, comments, reviews, commit messages, branch names, files and
+CI logs.
+
+- **Neutral content only.** Describe the software, the change and the evidence,
+  never the people or their setup:
+  - no names, signatures, employers or teams;
+  - nothing about which computer, network or subscription plan something ran
+    on;
+  - no local paths, hostnames, usernames or certificate names.
+
+  Write "verified against a gateway built from `<sha>`", not where or by whom.
+  Commands use repository-relative paths.
+- **Check before publishing.** Read every title, body, comment and commit
+  message for the items above before creating or editing it. For files, run
+  `git grep -niE '<terms>'` before each commit.
+- **Issues.** One problem per issue, with:
+  - what happens and what should happen;
+  - the evidence: command and output, run id, SHA;
+  - acceptance criteria that a test or command can check.
+
+  Label anything not yet proven as a hypothesis.
+- **Branches and pull requests.**
+  - Branch off `dev` and open a draft pull request into `dev` at the first
+    push. Never target `main`.
+  - Push the failing test first and see it red in CI, then the fix green.
+  - The body states the change, the evidence (run ids, SHAs, command output)
+    and what was not verified. Use `Refs #n` while work on the issue remains
+    and `Closes #n` when the pull request completes it.
+  - Squash-merge once every check is green and review is closed, then delete
+    the branch.
+- **Commits.** An imperative subject and one logical change; the body says why.
+  Stage files by name.
+- **If something private was published:**
+  - Delete a comment to remove it completely, or rewrite a title or body.
+  - An edited issue or pull request body keeps its old text in the edit
+    history. A maintainer must remove each revision with "Delete revision from
+    history" in the web page.
+  - Commit messages and files pushed to `dev` or `main` cannot be rewritten, so
+    check them before pushing.
 
 ## Reading logs
 
