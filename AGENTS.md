@@ -70,21 +70,28 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
      Otherwise it runs the device flow: the code goes to the log and the host
      shell opens the URL. A new token is saved as soon as GitHub returns it. A
      network error (TLS, connect, timeout) exits 1 with a hint and never starts
-     a new device flow. A rejected token is removed, then the device flow runs.
+     a new device flow. Any other failure of the saved token, such as an HTTP
+     error, an unreadable answer or an empty model list, removes the token and
+     runs the device flow.
   3. `copilot_auth.py` writes `state/config.yaml`, the LiteLLM model list built
      from Copilot's live `/models` metadata, and `state/defaults.env`, the
      Claude Code and Codex defaults.
   4. `exec litellm`.
 - **Model routing** (`copilot_auth.py`):
   - Exposed: chat models with a `model_picker_category` whose `policy.state` is
-    not `disabled`.
-  - Responses mode when `supported_endpoints` lists `/responses`; chat mode
-    otherwise.
+    not `disabled`. An entry without `capabilities` metadata falls back to
+    name rules (embeddings, legacy snapshots and old GPT-3.5/4 and Gemini 2
+    ids are excluded).
+  - Responses mode when `supported_endpoints` lists `/responses`, chat mode
+    when it lists other endpoints. Without `supported_endpoints`, ids that
+    contain `codex` or start with `gpt-5` use responses mode.
   - Names: non-Claude models are served as `anthropic-<id>` (for Claude Code's
-    `/model` picker) and as `<id>`. A `[1m]` variant exists only when
-    `max_prompt_tokens` is at least 1,000,000.
+    `/model` picker) and as `<id>`. A `[1m]` variant exists only when the
+    prompt limit (`max_prompt_tokens`, else `max_context_window_tokens`) is at
+    least 1,000,000.
   - `drop_params: true`: unsupported parameters are dropped instead of failing.
-    Codex always sends a reasoning effort.
+    Codex sends its configured reasoning effort with every request, which chat
+    models without reasoning support rejected before this setting.
 - **Defaults** (`state/defaults.env`):
   - `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`: the newest model per family,
     with fallbacks.
@@ -103,7 +110,7 @@ sources the 0600 secrets file, exports the paths and port, and sources
 | Command | What it does |
 |---|---|
 | `c-claude [args]` | Starts the gateway if needed, then runs `claude` with `ANTHROPIC_BASE_URL`, the gateway key, model discovery, the family defaults and the auto-compact window. |
-| `c-codex [args]` | Starts the gateway if needed, then runs `codex` with a `copilot-gateway` provider (Responses API, the gateway's `/models` catalog), the default model and context window, and a reasoning effort clamped to what the default model supports. |
+| `c-codex [args]` | Starts the gateway if needed, then runs `codex` with a `copilot-gateway` provider (Responses API, the gateway's `/models` catalog), the default model and context window. When the reasoning effort in `~/.codex/config.toml` is not one the default model supports, it passes the highest effort that model supports instead. |
 | `cc-copilot` | Runs the stack attached with live logs and a green READY banner. Ctrl-C stops it for every terminal. |
 | `cc-copilot -d` | Runs it detached, showing the log until ready. |
 | `cc-copilot --stop` | `docker compose down`. |
@@ -120,7 +127,7 @@ after `git pull` or `--update`.
 |---|---|---|
 | `LITELLM_MASTER_KEY`, `SEARXNG_SECRET` | `setup.sh` (secrets file) | Gateway key and SearXNG secret. Never print. |
 | `COPILOT_GATEWAY_DIR`, `COPILOT_GATEWAY_PORT`, `COPILOT_GATEWAY_RC` | RC block | Clone path, port (default 4000), RC file. |
-| `COPILOT_TOKEN_DIR` | RC block | Copilot token folder, default `~/.config/litellm/github_copilot`. |
+| `COPILOT_TOKEN_DIR` | RC block | Copilot token folder, default `~/.config/litellm/github_copilot`. `setup.sh` takes it from `GITHUB_COPILOT_TOKEN_DIR` when that is set. |
 | `COPILOT_CA_FILE` | user | Extra root CA (PEM) for networks that inspect HTTPS. |
 | `SMOKE_TIMEOUT`, `SMOKE_CODEX_EFFORT` | user | Per-call timeout and Codex effort for `scripts/smoke-models.sh`. |
 
@@ -138,6 +145,9 @@ container. It is only needed for GHE.com data-residency endpoints.
 | `ca_bundle.py` | certifi plus host certificates, valid and deduplicated. |
 | `litellm_patches.py` | Exact-snippet patches to the installed LiteLLM. |
 | `searxng/settings.yml` | SearXNG settings. |
+| `requirements.txt` | `litellm[proxy]==1.106.2` and `openai`, exact pins. Change by PR only. |
+| `.env.example` | GHE.com endpoint overrides, copied to `.env` when needed. |
+| `ruff.toml`, `pytest.ini` | Lint settings (line length 120) and the pytest path. |
 | `scripts/smoke-models.sh` | Headless call to every model through `c-claude` and `c-codex`. |
 | `scripts/diagnose-tls.sh`, `scripts/export-company-ca.sh` | TLS diagnosis and Windows CA export for networks that inspect HTTPS. |
 | `tests/` | `installer_test.sh` (fake docker, claude, codex, powershell.exe) and the pytest suites. |
@@ -187,13 +197,20 @@ and seen red in CI. The fix then turns it green.
 scripts/smoke-models.sh [claude|codex|all] [model regex]
 ```
 
-The script sources the real functions and starts the gateway if needed. It runs
-one headless call per model, `c-claude -p ... --model M` for `claude*` and
-`anthropic-*` names and `c-codex exec -m M` for bare ids, with throwaway
-`CLAUDE_CONFIG_DIR` and `CODEX_HOME`. Each result is one of:
+The script sources the real functions and starts the gateway if needed. It
+uses throwaway `CLAUDE_CONFIG_DIR` and `CODEX_HOME` folders and makes one
+headless call per model name:
+
+- `anthropic-*` names, including `[1m]`: `c-claude -p ... --model M` only.
+- `claude*` names: both `c-claude` and `c-codex`, except `[1m]` names, which
+  go to `c-claude` only.
+- Every other bare id: `c-codex exec -m M` only.
+
+Each result is one of:
 
 - `PASS`: the model answered `PONG`;
-- `PLAN`: Copilot answered `model_not_supported`, so the model is not in the plan;
+- `PLAN`: the output contains `model_not_supported` or `requested model is not
+  supported`, so the model is not in the plan;
 - `FAIL`: anything else.
 
 The script exits 1 on any FAIL. Output goes to
@@ -206,7 +223,8 @@ The script exits 1 on any FAIL. Output goes to
 To run it as an agent without the operator's key, export a throwaway key and
 secret (`LITELLM_MASTER_KEY=sk-<random>`, `SEARXNG_SECRET=<random>`) together
 with `COPILOT_TOKEN_DIR`. Stop any gateway started with another key first
-(`cc-copilot --stop`), or every call gets 401.
+(`cc-copilot --stop`). Otherwise the script finds the gateway running but never
+answering its key, waits up to 30 minutes, then exits 1 before any call.
 
 ### Direct probes
 
@@ -245,12 +263,12 @@ To summarize errors in a saved log:
 | Symptom | Cause | Fix |
 |---|---|---|
 | A new device code on every restart | An older version discarded the token on network errors. | Update: `cc-copilot --update`, then `cc-copilot -d`. |
-| `CERTIFICATE_VERIFY_FAILED` in the gateway log | The network re-signs HTTPS with a company root CA. | `bash scripts/diagnose-tls.sh` prints a VERDICT. Usually: open a new terminal, then `cc-copilot --stop; cc-copilot -d`. Otherwise run `scripts/export-company-ca.sh` and set `COPILOT_CA_FILE`. |
+| `CERTIFICATE_VERIFY_FAILED` in the gateway log | The network re-signs HTTPS with a company root CA. | `bash scripts/diagnose-tls.sh` prints a VERDICT. Usually: open a new terminal, then `cc-copilot --stop; cc-copilot -d`. Otherwise run `scripts/export-company-ca.sh` (WSL only) and set `COPILOT_CA_FILE`; on macOS or Linux, set `COPILOT_CA_FILE` to the company root CA from IT. |
 | `state/host-ca.pem` is empty | The shell that started the gateway had functions from before the update. | Open a new terminal, then `cc-copilot --stop; cc-copilot -d`. |
 | `Authenticated but still can't fetch models` | The plan or organization policy blocks API access, or a proxy blocks it. | Confirm Copilot works in the IDE. |
 | `PLAN` results in the smoke test | The model is listed but not in the plan. | Enable it in GitHub Copilot settings or use another model. |
 | Codex `Reconnecting... 1/5` | The gateway returned 5xx. | Read `gateway.log` for the traceback. Probe `/v1/responses` directly. |
-| 401 from the gateway | The key differs from the one the running gateway started with. | `cc-copilot --stop`, then start it again from the same shell. |
+| `curl` gets 401, or `c-claude` waits and prints `not ready after 30 minutes` while the container runs | The shell's key differs from the one the running gateway started with. | `cc-copilot --stop`, then start it again from the same shell. |
 | Port 4000 already in use | Another service holds the port. | `PORT=4100 ./setup.sh`, then open a new terminal. |
 | A new login is needed | The token is gone or revoked. | `cc-copilot --stop`, delete the token folder, run `c-claude`. |
 
