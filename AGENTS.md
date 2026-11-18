@@ -19,11 +19,8 @@ local developer tool.
 
 ## Hard rules
 
-- **No personal details.** The files and everything published around them
-  (issues, pull requests, comments, commits) never name a person, employer or
-  team. They never say which computer, network or subscription plan something
-  ran on, and never show local paths, hostnames or usernames. See "Issues, pull
-  requests and commits".
+- **No personal details** in files or in anything published around them. See
+  "Issues, pull requests and commits".
 - **LiteLLM is pinned.** The exact pin is `litellm[proxy]==1.106.2`, because
   LiteLLM was compromised on PyPI twice in 2026 (the README supply-chain notice
   has the details). Never loosen it to a range. Change it only by pull request,
@@ -279,7 +276,7 @@ CI logs.
   Commands use repository-relative paths.
 - **Check before publishing.** Read every title, body, comment and commit
   message for the items above before creating or editing it. For files, run
-  `git grep -niE '<terms>'` before each commit.
+  `git grep -niE '<terms>'` after `git add` and before each commit.
 - **Issues.** One problem per issue, with:
   - what happens and what should happen;
   - the evidence: command and output, run id, SHA;
@@ -288,22 +285,24 @@ CI logs.
   Label anything not yet proven as a hypothesis.
 - **Branches and pull requests.**
   - Branch off `dev` and open a draft pull request into `dev` at the first
-    push. Never target `main`.
-  - Push the failing test first and see it red in CI, then the fix green.
+    push.
+  - Follow "Testing" for red, then green.
   - The body states the change, the evidence (run ids, SHAs, command output)
     and what was not verified. Use `Refs #n` while work on the issue remains
     and `Closes #n` when the pull request completes it.
-  - Squash-merge once every check is green and review is closed, then delete
-    the branch.
+  - Squash-merge into `dev` once every check is green and review is closed,
+    then delete the branch. Its commits stay visible on the pull request.
 - **Commits.** An imperative subject and one logical change; the body says why.
   Stage files by name.
 - **If something private was published:**
-  - Delete a comment to remove it completely, or rewrite a title or body.
-  - An edited issue or pull request body keeps its old text in the edit
-    history. A maintainer must remove each revision with "Delete revision from
-    history" in the web page.
-  - Commit messages and files pushed to `dev` or `main` cannot be rewritten, so
-    check them before pushing.
+  - Deleting a comment removes it completely.
+  - An edited comment or issue or pull request body keeps its old text in the
+    edit history. A maintainer removes each old revision with "Delete revision
+    from history" in the web page.
+  - A title change stays visible in the timeline.
+  - Commits pushed to `dev` or `main` cannot be rewritten (force-push is
+    blocked) and stay reachable by SHA, so check commit messages and staged
+    files before pushing.
 
 ## Reading logs
 
@@ -331,7 +330,7 @@ To summarize errors in a saved log:
 | Symptom | Cause | Fix |
 |---|---|---|
 | A new device code on every restart | An older version discarded the token on network errors. | Update: `cc-copilot --update`, then `cc-copilot -d`. |
-| `CERTIFICATE_VERIFY_FAILED` in the gateway log | The network re-signs HTTPS with a company root CA. | `bash scripts/diagnose-tls.sh` prints a VERDICT. Usually: open a new terminal, then `cc-copilot --stop; cc-copilot -d`. Otherwise run `scripts/export-company-ca.sh` (WSL only) and set `COPILOT_CA_FILE`; on macOS or Linux, set `COPILOT_CA_FILE` to the company root CA from IT. |
+| `CERTIFICATE_VERIFY_FAILED` in the gateway log | The network re-signs HTTPS with a company root CA. | `bash scripts/diagnose-tls.sh` prints a VERDICT. Usually: open a new terminal, then `cc-copilot --stop; cc-copilot -d`. Otherwise run `scripts/export-company-ca.sh` (WSL only) and set `COPILOT_CA_FILE`; on macOS or Linux, set `COPILOT_CA_FILE` to the company root CA from the network administrator. |
 | `state/host-ca.pem` is empty | The shell that started the gateway had functions from before the update. | Open a new terminal, then `cc-copilot --stop; cc-copilot -d`. |
 | `Authenticated but still can't fetch models` | The plan or organization policy blocks API access, or a proxy blocks it. | Confirm Copilot works in the IDE. |
 | `PLAN` results in the smoke test | The model is listed but not in the plan. | Enable it in GitHub Copilot settings or use another model. |
