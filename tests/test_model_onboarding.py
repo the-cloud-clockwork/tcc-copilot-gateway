@@ -160,7 +160,7 @@ def test_config_serves_native_web_search_from_searxng() -> None:
 
 
 def test_config_drops_parameters_a_model_does_not_support() -> None:
-    """Codex's reasoning effort reaches chat models without reasoning support, so LiteLLM drops it instead of failing."""
+    """LiteLLM drops any parameter a model does not support, such as Codex's reasoning effort, instead of failing."""
     config = copilot_auth.render_config([])
     assert "litellm_settings:\n  drop_params: true\n" in config
 

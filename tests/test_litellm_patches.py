@@ -57,6 +57,7 @@ def test_responses_stream_patch_replays_a_finished_response_as_a_stream(tmp_path
     target.write_text(f"before\n{UPSTREAM_STREAM_BRANCH}after\n")
     assert litellm_patches.apply(patch, tmp_path) == "applied"
     text = target.read_text()
-    assert 'if route_type == "aresponses" and isinstance(response, ResponsesAPIResponse):' in text
+    assert 'route_type == "aresponses"\n                        and isinstance(response, ResponsesAPIResponse)\n' in text
+    assert 'and not self.data.get("background")' in text
     assert "response = CachedResponsesAPIStreamingIterator(\n" in text
     assert text.index("CachedResponsesAPIStreamingIterator(") < text.index("selected_data_generator = select_data_generator(")

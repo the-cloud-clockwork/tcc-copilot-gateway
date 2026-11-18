@@ -45,7 +45,11 @@ PATCHES = (
             "                    from litellm.responses.streaming_iterator import CachedResponsesAPIStreamingIterator\n"
             "                    from litellm.types.llms.openai import ResponsesAPIResponse\n"
             "\n"
-            '                    if route_type == "aresponses" and isinstance(response, ResponsesAPIResponse):\n'
+            "                    if (\n"
+            '                        route_type == "aresponses"\n'
+            "                        and isinstance(response, ResponsesAPIResponse)\n"
+            '                        and not self.data.get("background")\n'
+            "                    ):\n"
             "                        response = CachedResponsesAPIStreamingIterator(\n"
             "                            response=response, logging_obj=logging_obj\n"
             "                        )\n"
