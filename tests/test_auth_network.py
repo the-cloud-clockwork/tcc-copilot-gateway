@@ -84,6 +84,28 @@ def test_device_flow_network_failure_does_not_claim_a_kept_login(
     assert "login is kept" not in out
 
 
+def test_rejected_token_is_not_reported_as_kept(
+    token_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A token GitHub rejected is removed, so a network failure in the new device flow claims no kept login."""
+    (token_dir / "access-token").write_text("gho_revoked")
+
+    def rejected(access_token: str) -> dict[str, Any]:
+        """Reject the saved token."""
+        request = httpx.Request("GET", TOKEN_URL)
+        raise httpx.HTTPStatusError("401", request=request, response=httpx.Response(401, request=request))
+
+    def unreachable() -> str:
+        """Raise the error an unreachable github.com causes during the device flow."""
+        raise httpx.ConnectError("unreachable", request=httpx.Request("POST", "https://github.com/login/device/code"))
+
+    monkeypatch.setattr(copilot_auth, "exchange_api_key", rejected)
+    monkeypatch.setattr(copilot_auth, "device_flow", unreachable)
+    assert copilot_auth.main() == 1
+    assert "login is kept" not in capsys.readouterr().out
+    assert not (token_dir / "access-token").exists()
+
+
 def test_fresh_login_is_kept_when_the_network_fails(token_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The token from a finished device flow is saved even when the next call fails on the network."""
 

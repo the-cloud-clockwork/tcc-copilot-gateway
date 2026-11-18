@@ -439,6 +439,7 @@ def _refresh() -> int:
             _report(models)
             return 0
         _log("✗ Token can't fetch models — re-authenticating.")
+        ACCESS_TOKEN_FILE.unlink(missing_ok=True)
     else:
         _log("No token found — authenticating.")
 
