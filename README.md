@@ -145,7 +145,8 @@ You never edit a model list. On every start, the gateway reads GitHub's live
   `/v1/messages` through LiteLLM.
 - **Names:** the vendor in Copilot's `/models` metadata decides the names. A
   model without a vendor is judged by its id (`claude…` or `gpt-…`).
-  - Anthropic models keep their ids (`claude-haiku-4.5`), for Claude Code only.
+  - Anthropic models are for Claude Code only: a `claude…` id stays as it is
+    (`claude-haiku-4.5`), any other id becomes `anthropic-<id>`.
     Codex's model catalog leaves them out.
   - OpenAI and Azure OpenAI models keep their ids (`gpt-6-luna`), for Codex
     only. They get no `anthropic-` name, so Claude Code's `/model` picker, which

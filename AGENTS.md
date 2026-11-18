@@ -91,7 +91,8 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
     `gpt-…` and `o1`/`o3`/`o4` are OpenAI). Claude Code and Codex only list
     their own names; a forced `--model`/`-m` outside them is unsupported.
   - Names follow from that rule:
-    - Anthropic models: bare id, for Claude Code only.
+    - Anthropic models, for Claude Code only: a `claude…` id stays bare, any
+      other id becomes `anthropic-<id>`.
     - OpenAI and Azure OpenAI models: bare id, for Codex only, with no
       `anthropic-` name.
     - Every other vendor: `anthropic-<id>` for Claude Code's `/model` picker,
