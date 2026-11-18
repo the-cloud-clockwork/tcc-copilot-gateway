@@ -93,6 +93,44 @@ PATCHES = (
         ),
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/13",
     ),
+    Patch(
+        path="litellm/integrations/websearch_interception/handler.py",
+        old=(
+            "    ) -> AgenticLoopPlan:\n"
+            '        tool_calls: Final = tools["tool_calls"]\n'
+            '        response_format: Final = tools.get("response_format", "openai")\n'
+        ),
+        new=(
+            "    ) -> AgenticLoopPlan:\n"
+            '        tool_calls: Final = tools["tool_calls"]\n'
+            "        import websearch_mixed\n"
+            "\n"
+            "        override = await websearch_mixed.chat_override(self, response, tool_calls, kwargs)\n"
+            "        if override is not None:\n"
+            "            return AgenticLoopPlan(run_agentic_loop=False, response_override=override, metadata={})\n"
+            '        response_format: Final = tools.get("response_format", "openai")\n'
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/17",
+    ),
+    Patch(
+        path="litellm/integrations/websearch_interception/handler.py",
+        old=(
+            "    ) -> AgenticLoopPlan:\n"
+            '        tool_calls: Final = tools["tool_calls"]\n'
+            "        request_patch: Final = await self._build_responses_request_patch(\n"
+        ),
+        new=(
+            "    ) -> AgenticLoopPlan:\n"
+            '        tool_calls: Final = tools["tool_calls"]\n'
+            "        import websearch_mixed\n"
+            "\n"
+            "        override = await websearch_mixed.responses_override(self, response, tool_calls, kwargs)\n"
+            "        if override is not None:\n"
+            "            return AgenticLoopPlan(run_agentic_loop=False, response_override=override, metadata={})\n"
+            "        request_patch: Final = await self._build_responses_request_patch(\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/17",
+    ),
 )
 
 
