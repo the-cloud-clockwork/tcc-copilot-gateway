@@ -9,29 +9,37 @@ import websearch_mixed
 
 
 class FakeInterceptor:
-    """Stands in for LiteLLM's WebSearchInterceptionLogger and records the queries it searched."""
+    """Stands in for LiteLLM's WebSearchInterceptionLogger, with its helpers' return shapes, and records the
+    queries it searched."""
 
     def __init__(self) -> None:
         self.queries: list[str] = []
 
-    async def _execute_search(self, query: str, kwargs: Any = None, rich: Any = None) -> str:
-        """Return a canned result for the query."""
+    async def _execute_search(self, query: str, kwargs: Any = None, rich: Any = None) -> tuple[str, None]:
+        """Return a canned result as LiteLLM's (text, SearchResponse) pair."""
         self.queries.append(query)
-        return f"result for {query}"
+        return f"result for {query}", None
+
+    @staticmethod
+    def _tool_call_query(tool_call: dict) -> str:
+        """The query of a detected search call, or an empty string."""
+        tool_input = tool_call.get("input")
+        return tool_input.get("query", "") if isinstance(tool_input, dict) else ""
 
     @staticmethod
     def _rich_search_input(tool_input: object) -> None:
         """No objective or query list in these tests."""
-        return
 
-    async def _create_empty_search_result(self) -> str:
+    async def _create_empty_search_result(self) -> tuple[str, None]:
         """The result for a call without a query."""
-        return ""
+        return "", None
 
     @staticmethod
     def _extract_search_text(result: object) -> str:
-        """The text the follow-up would carry for one result."""
-        return str(result)
+        """The text the follow-up would carry for one result, as LiteLLM renders it."""
+        if isinstance(result, Exception):
+            return f"Search failed: {result}"
+        return result[0] if isinstance(result, tuple) else str(result)
 
 
 class FakeResponsesResponse(SimpleNamespace):
@@ -83,7 +91,9 @@ def _chat_response(*calls: SimpleNamespace, content: str | None = None) -> Simpl
 def test_mixed_chat_message_keeps_the_other_calls_and_carries_the_search_results() -> None:
     """On the chat bridge the search calls leave tool_calls and their results join the message content."""
     interceptor = FakeInterceptor()
-    response = _chat_response(_chat_call("exec_command", "e1"), _chat_call("litellm_web_search", "s1"), content="Doing both.")
+    response = _chat_response(
+        _chat_call("exec_command", "e1"), _chat_call("litellm_web_search", "s1"), content="Doing both."
+    )
     original = copy.deepcopy(response)
     override = asyncio.run(websearch_mixed.chat_override(interceptor, response, [SEARCH_CALL], {}))
     message = override.choices[0].message
@@ -102,3 +112,26 @@ def test_search_only_chat_message_is_left_to_the_agentic_loop() -> None:
     response = _chat_response(_chat_call("web_search", "s1"))
     assert asyncio.run(websearch_mixed.chat_override(interceptor, response, [SEARCH_CALL], {})) is None
     assert interceptor.queries == []
+
+
+class FailingInterceptor(FakeInterceptor):
+    """Fails the search for one query."""
+
+    async def _execute_search(self, query: str, kwargs: Any = None, rich: Any = None) -> tuple[str, None]:
+        """Raise for the query 'broken', answer the others."""
+        if query == "broken":
+            raise RuntimeError("search backend down")
+        return await super()._execute_search(query, kwargs, rich)
+
+
+def test_every_search_of_a_mixed_response_runs_and_a_failed_one_is_reported() -> None:
+    """Two search calls both run; the failed one shows up as its error text instead of failing the response."""
+    interceptor = FailingInterceptor()
+    calls = [SEARCH_CALL, {"call_id": "s2", "name": "litellm_web_search", "input": {"query": "broken"}}]
+    response = FakeResponsesResponse(id="r1", output=[EXEC_ITEM, SEARCH_ITEM, {**SEARCH_ITEM, "call_id": "s2"}])
+    override = asyncio.run(websearch_mixed.responses_override(interceptor, response, calls, {}))
+    text = override.output[0]["content"][0]["text"]
+    assert interceptor.queries == ["litellm release"]
+    assert "result for litellm release" in text
+    assert "'broken'" in text and "search backend down" in text
+    assert [item.get("name") for item in override.output[1:]] == ["exec_command"]
