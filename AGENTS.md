@@ -142,7 +142,7 @@ after `git pull` or `--update`.
 | `COPILOT_GATEWAY_DIR`, `COPILOT_GATEWAY_PORT`, `COPILOT_GATEWAY_RC` | RC block | Clone path, port (default 4000), RC file. |
 | `COPILOT_TOKEN_DIR` | RC block | Copilot token folder, default `~/.config/litellm/github_copilot`. `setup.sh` takes it from `GITHUB_COPILOT_TOKEN_DIR` when that is set. |
 | `COPILOT_CA_FILE` | user | Extra root CA (PEM) for networks that inspect HTTPS. |
-| `SMOKE_TIMEOUT`, `SMOKE_CODEX_EFFORT` | user | Per-call timeout (default 300 s) and Codex effort for `scripts/smoke-models.sh`. |
+| `SMOKE_TIMEOUT`, `SMOKE_CODEX_EFFORT`, `SMOKE_SEARCH_BYTES` | user | Per-call timeout (default 300 s), Codex effort and the SearXNG bytes that count as a search (default 10000) for `scripts/smoke-models.sh`. |
 
 `.env` (copied from `.env.example`, gitignored) is passed to the gateway
 container. It is only needed for GHE.com data-residency endpoints.
@@ -242,8 +242,9 @@ Each call is asked to read a random value from `smoke-check.txt` with a tool
 and to run a web search. The script counts the bytes the SearXNG container
 receives during the call. Each result is one of:
 
-- `PASS`: the call succeeded, the output holds the value and SearXNG received
-  traffic;
+- `PASS`: the call succeeded, the output holds the value, SearXNG received at
+  least `SMOKE_SEARCH_BYTES` (default 10000) during the call, and the log never
+  mentions `litellm_web_search`;
 - `PLAN`: the output contains `model_not_supported` or `requested model is not
   supported`, so the model is not in the plan;
 - `NOSEARCH`: the value was read, but no search ran;

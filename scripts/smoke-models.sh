@@ -20,6 +20,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK_FILE=smoke-check.txt
 PROMPT="Read the file $CHECK_FILE in the current directory with your tools, then use your web search tool to find the latest LiteLLM release. Reply with the file's exact content on the first line and the release on the second line."
 CALL_TIMEOUT="${SMOKE_TIMEOUT:-300}"
+SEARCH_BYTES="${SMOKE_SEARCH_BYTES:-10000}"
 # shellcheck disable=SC2016
 WRAP='. "$COPILOT_GATEWAY_DIR/shell/cc-copilot.sh" && "$0" "$@"'
 
@@ -59,7 +60,8 @@ fi
 
 classify() {
   local status="$1" log="$2" token="$3" searched="$4"
-  if [[ "$status" == 0 ]] && grep -qF "$token" "$log" && [[ "$searched" -gt 0 ]]; then
+  if [[ "$status" == 0 ]] && grep -qF "$token" "$log" && [[ "$searched" -ge "$SEARCH_BYTES" ]] \
+    && ! grep -q 'litellm_web_search' "$log"; then
     echo "PASS"
   elif [[ "$status" != 0 ]] && grep -qiE 'model_not_supported|requested model is not supported' "$log"; then
     echo "PLAN"
@@ -74,7 +76,13 @@ classify() {
 
 detail() {
   case "$1" in
-    NOSEARCH) echo "the check file was read, but SearXNG got no traffic during the call" ;;
+    NOSEARCH)
+      if grep -q 'litellm_web_search' "$2"; then
+        echo "the check file was read, but the client got the raw litellm_web_search call"
+      else
+        echo "the check file was read, but SearXNG got only $3 bytes during the call (need $SEARCH_BYTES)"
+      fi
+      ;;
     NOTOOL) echo "the answer does not hold the value from $CHECK_FILE" ;;
     *) grep -iE 'error|exception|status|not supported|invalid|unexpected' "$2" | head -n 1 | cut -c 1-240 | tr '\t' ' ' ;;
   esac
@@ -100,7 +108,7 @@ run_call() {
   searched=$(($(searxng_bytes) - before))
   seconds=$(($(date +%s) - start))
   result="$(classify "$status" "$log" "$token" "$searched")"
-  printf '%s\t%s\t%s\t%s\t%s\n' "$tool" "$model" "$result" "$seconds" "$([[ "$result" == PASS ]] || detail "$result" "$log")" >> "$OUT/results.tsv"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$tool" "$model" "$result" "$seconds" "$([[ "$result" == PASS ]] || detail "$result" "$log" "$searched")" >> "$OUT/results.tsv"
   printf '%-6s %-8s %4ss  %s\n' "$tool" "$result" "$seconds" "$model"
 }
 
