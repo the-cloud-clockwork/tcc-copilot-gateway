@@ -1,6 +1,7 @@
 *
 !requirements.txt
 !litellm_patches.py
+!websearch_mixed.py
 !ca_bundle.py
 !copilot_auth.py
 !entrypoint.sh

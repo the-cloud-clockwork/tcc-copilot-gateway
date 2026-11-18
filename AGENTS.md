@@ -145,6 +145,7 @@ container. It is only needed for GHE.com data-residency endpoints.
 | `copilot_auth.py` | Token check, device flow, model onboarding, config and defaults. |
 | `ca_bundle.py` | certifi plus host certificates, valid and deduplicated. |
 | `litellm_patches.py` | Exact-snippet patches to the installed LiteLLM. |
+| `websearch_mixed.py` | Answers web searches made in parallel with other tool calls; installed next to LiteLLM. |
 | `searxng/settings.yml` | SearXNG settings. |
 | `requirements.txt` | `litellm[proxy]==1.106.2` and `openai`, exact pins. Change by PR only. |
 | `.env.example` | GHE.com endpoint overrides, copied to `.env` when needed. |
@@ -178,6 +179,12 @@ patch twice is a no-op.
 
    CI runs `tests/codex_catalog_check.py` in the built image against this
    catalog.
+4. `websearch_interception/handler.py`, both agentic-loop plan builders (issue
+   #17). A response that mixes web search calls with other tool calls goes to
+   `websearch_mixed.py` first. The module runs the searches once and returns the
+   results as an assistant message followed by the other calls. The client never
+   receives `litellm_web_search`. CI runs `tests/websearch_mixed_check.py` in the
+   built image.
 
 ## Testing
 

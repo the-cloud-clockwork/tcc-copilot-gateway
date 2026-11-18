@@ -70,6 +70,10 @@ jobs:
         run: |
           docker run --rm -v "$PWD/tests:/tests:ro" -e PYTHONPATH=/app --entrypoint python tcc-copilot-gateway:local \
             /tests/codex_catalog_check.py
+      - name: Mixed web search responses are answered on LiteLLM's own types
+        run: |
+          docker run --rm -w / -v "$PWD/tests:/tests:ro" --entrypoint python tcc-copilot-gateway:local \
+            /tests/websearch_mixed_check.py
       - name: Gateway image builds its CA bundle from the host certificates
         run: |
           mkdir -p /tmp/ca-state

@@ -90,3 +90,34 @@ def test_codex_catalog_patches_keep_tools_in_the_tool_list_and_drop_grok_sub_age
     assert '    multi_agent_version: Literal["disabled"] | None = None\n    context_window: int | None\n' in text
     assert 'multi_agent_version="disabled" if "grok" in (row.upstream_model or row.id) else None,\n        )' in text
     assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["already applied"] * 3
+
+
+UPSTREAM_PLAN_BUILDERS = (
+    "    async def async_build_chat_completion_agentic_loop_plan(\n"
+    "    ) -> AgenticLoopPlan:\n"
+    '        tool_calls: Final = tools["tool_calls"]\n'
+    '        response_format: Final = tools.get("response_format", "openai")\n'
+    "    async def async_build_responses_agentic_loop_plan(\n"
+    "    ) -> AgenticLoopPlan:\n"
+    '        tool_calls: Final = tools["tool_calls"]\n'
+    "        request_patch: Final = await self._build_responses_request_patch(\n"
+)
+
+
+def test_mixed_search_patches_answer_mixed_responses_before_the_agentic_loop(tmp_path: Path) -> None:
+    """Both plan builders hand a response that mixes searches with other calls to websearch_mixed first."""
+    patches = [
+        p
+        for p in litellm_patches.PATCHES
+        if p.path == "litellm/integrations/websearch_interception/handler.py" and "websearch_mixed" in p.new
+    ]
+    target = tmp_path / patches[0].path
+    target.parent.mkdir(parents=True)
+    target.write_text(UPSTREAM_PLAN_BUILDERS)
+    assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["applied"] * 2
+    text = target.read_text()
+    chat = text.index("websearch_mixed.chat_override(self, response, tool_calls, kwargs)")
+    responses = text.index("websearch_mixed.responses_override(self, response, tool_calls, kwargs)")
+    assert text.index("async_build_chat_completion_agentic_loop_plan") < chat < text.index('response_format: Final')
+    assert text.index("async_build_responses_agentic_loop_plan") < responses < text.index("request_patch: Final")
+    assert text.count("AgenticLoopPlan(run_agentic_loop=False, response_override=override") == 2
