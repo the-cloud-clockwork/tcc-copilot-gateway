@@ -375,6 +375,7 @@ def render_config(routes: list[Route]) -> str:
     lines += [
         "",
         "litellm_settings:",
+        "  drop_params: true",
         '  callbacks: ["websearch_interception"]',
         "  websearch_interception_params:",
         '    enabled_providers: ["github_copilot"]',

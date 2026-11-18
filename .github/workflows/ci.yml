@@ -62,6 +62,10 @@ jobs:
         run: docker compose config --quiet
       - name: Gateway image builds with pinned LiteLLM and its patches
         run: docker compose build gateway
+      - name: Patched LiteLLM proxy modules import
+        run: |
+          docker run --rm --entrypoint python tcc-copilot-gateway:local -c \
+            'import litellm.proxy.common_request_processing, litellm.integrations.websearch_interception.handler'
       - name: Gateway image builds its CA bundle from the host certificates
         run: |
           mkdir -p /tmp/ca-state

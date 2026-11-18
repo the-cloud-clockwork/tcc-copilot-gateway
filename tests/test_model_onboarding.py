@@ -159,6 +159,12 @@ def test_config_serves_native_web_search_from_searxng() -> None:
     assert "      search_provider: searxng\n      api_base: http://searxng:8080\n" in config
 
 
+def test_config_drops_parameters_a_model_does_not_support() -> None:
+    """LiteLLM drops any parameter a model does not support, such as Codex's reasoning effort, instead of failing."""
+    config = copilot_auth.render_config([])
+    assert "litellm_settings:\n  drop_params: true\n" in config
+
+
 def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """write_config writes config.yaml with every route and defaults.env with the family defaults."""
     monkeypatch.setattr(copilot_auth, "CONFIG_FILE", tmp_path / "config.yaml")

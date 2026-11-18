@@ -15,7 +15,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Patch:
-    """One exact snippet replacement in a file relative to the site-packages root, with its upstream reference."""
+    """One exact snippet replacement in a file relative to the site-packages root, with the reference that explains it."""
 
     path: str
     old: str
@@ -33,6 +33,29 @@ PATCHES = (
             "        ).strip()\n"
         ),
         upstream="https://github.com/BerriAI/litellm/pull/43458",
+    ),
+    Patch(
+        path="litellm/proxy/common_request_processing.py",
+        old=(
+            "                elif select_data_generator:\n"
+            "                    selected_data_generator = select_data_generator(\n"
+        ),
+        new=(
+            "                elif select_data_generator:\n"
+            "                    from litellm.responses.streaming_iterator import CachedResponsesAPIStreamingIterator\n"
+            "                    from litellm.types.llms.openai import ResponsesAPIResponse\n"
+            "\n"
+            "                    if (\n"
+            '                        route_type == "aresponses"\n'
+            "                        and isinstance(response, ResponsesAPIResponse)\n"
+            '                        and not self.data.get("background")\n'
+            "                    ):\n"
+            "                        response = CachedResponsesAPIStreamingIterator(\n"
+            "                            response=response, logging_obj=logging_obj\n"
+            "                        )\n"
+            "                    selected_data_generator = select_data_generator(\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/10",
     ),
 )
 
