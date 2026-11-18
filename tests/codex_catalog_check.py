@@ -48,8 +48,9 @@ def problems(entries: dict[str, dict], served: list[str]) -> list[str]:
 
 def main() -> int:
     """Print every problem and exit 1 when there is one."""
-    served = [row.id for row in rows()]
-    body = codex_models_response_json(rows(), byte_limit=None)
+    listed = rows()
+    served = [row.id for row in listed]
+    body = codex_models_response_json(listed, byte_limit=None)
     entries = {entry["slug"]: entry for entry in json.loads(body.json)["models"]}
     found = problems(entries, served)
     for line in found:
