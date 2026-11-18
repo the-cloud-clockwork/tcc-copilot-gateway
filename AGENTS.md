@@ -213,19 +213,30 @@ The script sources the real functions and starts the gateway if needed. It
 uses throwaway `CLAUDE_CONFIG_DIR` and `CODEX_HOME` folders and makes one
 headless call per model name:
 
-- `anthropic-*` names, including `[1m]`: `c-claude -p ... --model M` only.
+- `anthropic-*` names, including `[1m]`: `c-claude -p ... --model M
+  --allowedTools Read,WebSearch` only.
 - `claude*` names: both `c-claude` and `c-codex`, except `[1m]` names, which
   go to `c-claude` only.
-- Every other bare id: `c-codex exec -m M` only.
+- Every other bare id: `c-codex --search exec -m M` only.
 
-Each result is one of:
+Each call is asked to read a random token from `smoke-token.txt` with a tool
+and to run a web search. The script counts the bytes the SearXNG container
+receives during the call. Each result is one of:
 
-- `PASS`: the model answered `PONG`;
+- `PASS`: the call succeeded, the output holds the token and SearXNG received
+  traffic;
 - `PLAN`: the output contains `model_not_supported` or `requested model is not
   supported`, so the model is not in the plan;
+- `NOSEARCH`: the token was read, but no search ran;
+- `NOTOOL`: the call succeeded without the token, so the model had no working
+  tools;
 - `FAIL`: anything else.
 
-The script exits 1 on any FAIL. Output goes to
+The script exits 1 on any `FAIL`, `NOTOOL` or `NOSEARCH`. A model can skip a
+search it was asked for, so rerun one `NOSEARCH` before treating it as a defect.
+SearXNG traffic from another session during a call counts as that call's
+search, so run the script while no other session uses the gateway.
+Output goes to
 `state/smoke/<UTC time>/`:
 
 - `results.tsv`: tool, model, result, seconds, first error line;
