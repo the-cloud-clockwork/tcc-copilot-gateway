@@ -224,6 +224,8 @@ receives during the call. Each result is one of:
 
 The script exits 1 on any `FAIL`, `NOTOOL` or `NOSEARCH`. A model can skip a
 search it was asked for, so rerun one `NOSEARCH` before treating it as a defect.
+SearXNG traffic from another session during a call counts as that call's
+search, so run the script while no other session uses the gateway.
 Output goes to
 `state/smoke/<UTC time>/`:
 

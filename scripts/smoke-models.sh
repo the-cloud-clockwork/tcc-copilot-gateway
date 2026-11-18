@@ -55,7 +55,7 @@ classify() {
   local status="$1" log="$2" token="$3" searched="$4"
   if [[ "$status" == 0 ]] && grep -q "$token" "$log" && [[ "$searched" -gt 0 ]]; then
     echo "PASS"
-  elif grep -qiE 'model_not_supported|requested model is not supported' "$log"; then
+  elif [[ "$status" != 0 ]] && grep -qiE 'model_not_supported|requested model is not supported' "$log"; then
     echo "PLAN"
   elif [[ "$status" == 0 ]] && grep -q "$token" "$log"; then
     echo "NOSEARCH"
@@ -69,7 +69,7 @@ classify() {
 detail() {
   case "$1" in
     NOSEARCH) echo "the token was read, but SearXNG got no traffic during the call" ;;
-    NOTOOL) echo "answered without reading the token file" ;;
+    NOTOOL) echo "the answer does not hold the token from smoke-token.txt" ;;
     *) grep -iE 'error|exception|status|not supported|invalid|unexpected' "$2" | head -n 1 | cut -c 1-240 | tr '\t' ' ' ;;
   esac
 }
