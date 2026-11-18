@@ -4,9 +4,10 @@ import asyncio
 import json
 import sys
 
-import websearch_mixed
 from litellm.types.llms.openai import ResponsesAPIResponse
 from litellm.types.utils import ModelResponse
+
+import websearch_mixed
 
 SEARCH_CALLS = [{"call_id": "s1", "input": {"query": "litellm release"}}]
 SEARCH_ARGUMENTS = json.dumps({"query": "litellm release"})
@@ -22,7 +23,7 @@ class Interceptor:
     @staticmethod
     def _rich_search_input(tool_input: object) -> None:
         """No objective or query list."""
-        return None
+        return
 
     async def _create_empty_search_result(self) -> str:
         """The result for a call without a query."""

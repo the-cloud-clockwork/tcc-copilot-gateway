@@ -22,7 +22,7 @@ class FakeInterceptor:
     @staticmethod
     def _rich_search_input(tool_input: object) -> None:
         """No objective or query list in these tests."""
-        return None
+        return
 
     async def _create_empty_search_result(self) -> str:
         """The result for a call without a query."""
