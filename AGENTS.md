@@ -62,7 +62,9 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
   and Codex's web-search tool from it. The default engines (brave, duckduckgo,
   google cse, wikidata) get suspended for `too many requests` or
   `access denied`, so the settings also enable bing, yandex, yahoo and mwmbl.
-  `max_agentic_loops: 10` lets one turn run up to ten searches; with the
+  `max_agentic_loops: 10` on every route (the `/v1/responses` path reads it
+  from the deployment, not from `websearch_interception_params`) lets one
+  turn run up to ten searches; with the
   default of 3, Codex models that search more often got the raw
   `litellm_web_search` call.
 - **Codex tool search:** the `codex_tool_search.handler` callback

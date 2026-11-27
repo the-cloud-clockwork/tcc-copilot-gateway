@@ -390,7 +390,7 @@ def render_config(routes: list[Route]) -> str:
         lines.append(f"  - model_name: {route.name}")
         if route.responses:
             lines += ["    model_info:", "      mode: responses"]
-        lines += ["    litellm_params:", f"      model: {route.target}"]
+        lines += ["    litellm_params:", f"      model: {route.target}", "      max_agentic_loops: 10"]
     lines += [
         "",
         "litellm_settings:",
