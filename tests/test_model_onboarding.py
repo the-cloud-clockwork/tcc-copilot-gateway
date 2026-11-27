@@ -220,6 +220,12 @@ def test_config_drops_parameters_a_model_does_not_support() -> None:
     assert "litellm_settings:\n  drop_params: true\n" in config
 
 
+def test_config_loads_the_codex_tool_search_callback() -> None:
+    """The gateway runs the callback that emulates Codex's tool_search for models that cannot run it."""
+    config = copilot_auth.render_config(copilot_auth.plan_routes(FIXTURE))
+    assert '  callbacks: ["websearch_interception", "codex_tool_search.handler"]\n' in config
+
+
 def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """write_config writes config.yaml with every route and defaults.env with the family defaults."""
     monkeypatch.setattr(copilot_auth, "CONFIG_FILE", tmp_path / "config.yaml")

@@ -78,6 +78,10 @@ jobs:
         run: |
           docker run --rm -w / -v "$PWD/tests:/tests:ro" --entrypoint python tcc-copilot-gateway:local \
             /tests/copilot_tool_reference_check.py
+      - name: Codex tool_search is emulated with plain function tools for non-stock models
+        run: |
+          docker run --rm -w / -v "$PWD/tests:/tests:ro" --entrypoint python tcc-copilot-gateway:local \
+            /tests/codex_tool_search_check.py
       - name: Gateway image builds its CA bundle from the host certificates
         run: |
           mkdir -p /tmp/ca-state
