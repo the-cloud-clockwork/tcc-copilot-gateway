@@ -62,6 +62,17 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
   and Codex's web-search tool from it. The default engines (brave, duckduckgo,
   google cse, wikidata) get suspended for `too many requests` or
   `access denied`, so the settings also enable bing, yandex, yahoo and mwmbl.
+  `max_agentic_loops: 10` lets one turn run up to ten searches; with the
+  default of 3, Codex models that search more often got the raw
+  `litellm_web_search` call.
+- **Codex tool search:** the `codex_tool_search.handler` callback
+  (`codex_tool_search.py`) emulates Codex's client-executed `tool_search` for
+  every model that is not a stock Codex catalog slug. Copilot rejects
+  `tool_search` for some models and LiteLLM drops it for chat-mode models.
+  The callback sends it as a function tool, turns `tool_search_call` and
+  `tool_search_output` items into function calls and outputs, adds the loaded
+  tools as flat `namespace__name` functions, and maps the model's calls back
+  to `tool_search_call` items and namespaced `function_call` items.
 - **Startup**, in `entrypoint.sh`:
   1. `ca_bundle.py` merges certifi with the host certificates in
      `state/host-ca.pem` into `state/ca-bundle.pem`, and the entrypoint exports
@@ -161,6 +172,7 @@ container. It is only needed for GHE.com data-residency endpoints.
 | `litellm_patches.py` | Exact-snippet patches to the installed LiteLLM. |
 | `websearch_mixed.py` | Answers web searches made in parallel with other tool calls; installed next to LiteLLM. |
 | `reasoning_levels.py` | Reads `state/reasoning_efforts.json` for the Codex catalog's per-model reasoning levels; installed next to LiteLLM. |
+| `codex_tool_search.py` | LiteLLM callback that emulates Codex's `tool_search` for non-stock models; installed next to LiteLLM. |
 | `searxng/settings.yml` | SearXNG settings. |
 | `requirements.txt` | `litellm[proxy]==1.106.2` and `openai`, exact pins. Change by PR only. |
 | `.env.example` | GHE.com endpoint overrides, copied to `.env` when needed. |
@@ -238,6 +250,9 @@ The CI jobs, all required through `Gate — Required`:
 - **compose:**
   - builds the image, which applies the patches;
   - imports the patched modules;
+  - runs the in-image checks: `codex_catalog_check.py`,
+    `websearch_mixed_check.py`, `copilot_tool_reference_check.py` and
+    `codex_tool_search_check.py`;
   - builds a CA bundle from a planted certificate;
   - checks that SearXNG answers JSON.
 

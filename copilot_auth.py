@@ -377,9 +377,8 @@ def codex_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
     limit = _prompt_limit(best)
     if limit:
         env["COPILOT_CODEX_CONTEXT_WINDOW"] = str(limit)
-    efforts = ((best.get("capabilities") or {}).get("supports") or {}).get("reasoning_effort")
-    if isinstance(efforts, list) and efforts:
-        ranked = sorted(efforts, key=lambda e: _EFFORT_ORDER.index(e) if e in _EFFORT_ORDER else -1)
+    ranked = _ranked_efforts(best)
+    if ranked:
         env["COPILOT_CODEX_REASONING_EFFORTS"] = " ".join(ranked)
     return env
 
