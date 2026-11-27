@@ -171,6 +171,13 @@ def test_parse_arguments_handles_objects_strings_and_junk() -> None:
     assert codex_tool_search.parse_arguments("[1, 2]") == {}
 
 
+def test_parse_arguments_turns_whole_number_floats_into_integers() -> None:
+    """A limit written as 5.0 reaches Codex as 5: Codex loads no tools for a float limit (seen with grok-4.7)."""
+    assert codex_tool_search.parse_arguments('{"query": "vault", "limit": 5.0}') == {"query": "vault", "limit": 5}
+    assert isinstance(codex_tool_search.parse_arguments({"limit": 8.0})["limit"], int)
+    assert codex_tool_search.parse_arguments({"limit": 2.5}) == {"limit": 2.5}
+
+
 def test_rewrite_output_item_turns_a_tool_search_function_call_into_a_tool_search_call() -> None:
     """A function_call named tool_search becomes a tool_search_call with parsed object arguments."""
     item = {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "tool_search", "arguments": '{"query": "x"}'}
