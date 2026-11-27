@@ -398,6 +398,7 @@ def render_config(routes: list[Route]) -> str:
         "  drop_params: true",
         '  callbacks: ["websearch_interception", "codex_tool_search.handler"]',
         "  websearch_interception_params:",
+        "    max_agentic_loops: 10",
         '    enabled_providers: ["github_copilot"]',
         f"    search_tool_name: {SEARCH_TOOL_NAME}",
         "",

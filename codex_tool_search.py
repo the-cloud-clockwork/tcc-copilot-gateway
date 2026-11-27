@@ -173,16 +173,20 @@ def rewrite_request(data: dict[str, Any]) -> tuple[dict[str, Any], FlatMap]:
 
 
 def parse_arguments(raw: Any) -> dict[str, Any]:
-    """The tool_search call's arguments as a JSON object, {} when raw is empty, not JSON, or not an object."""
+    """The tool_search call's arguments as a JSON object, {} when raw is empty, not JSON, or not an object, with
+    whole-number floats as integers because Codex loads no tools for a float limit."""
     if isinstance(raw, dict):
-        return raw
-    if not raw:
+        parsed: Any = raw
+    elif not raw:
         return {}
-    try:
-        parsed = json.loads(raw)
-    except (TypeError, ValueError):
+    else:
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(parsed, dict):
         return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return {key: int(value) if isinstance(value, float) and value.is_integer() else value for key, value in parsed.items()}
 
 
 def rewrite_output_item(item: Any, flat_map: FlatMap) -> None:
