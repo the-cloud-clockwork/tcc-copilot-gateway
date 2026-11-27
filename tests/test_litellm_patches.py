@@ -170,11 +170,7 @@ def test_copilot_messages_patch_drops_tool_reference_parts_first(tmp_path: Path)
     assert litellm_patches.apply(patch, tmp_path) == "already applied"
 
 
-UPSTREAM_CODEX_FALLBACK = (
-    "    experimental_supported_tools: tuple[()] = ()\n"
-    '    multi_agent_version: Literal["disabled"] | None = None\n'
-    "    context_window: int | None\n"
-)
+UPSTREAM_CODEX_FALLBACK = "    support_verbosity: Literal[False] = False\n    supports_reasoning_summaries: Literal[False] = False\n"
 
 
 def test_codex_catalog_patch_offers_tool_search_on_every_fallback_entry(tmp_path: Path) -> None:
