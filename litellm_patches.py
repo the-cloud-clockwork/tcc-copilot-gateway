@@ -163,6 +163,31 @@ PATCHES = (
         new="    support_verbosity: Literal[False] = False\n    supports_search_tool: Literal[True] = True\n",
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
     ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="    supported_reasoning_levels: tuple[()] = ()\n",
+        new=(
+            "    supported_reasoning_levels: tuple[dict[str, str], ...] = ()\n"
+            "    default_reasoning_level: str | None = None\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="    stock_model: Final = _stock_for(row, stock)\n",
+        new="    import reasoning_levels\n\n    stock_model: Final = _stock_for(row, stock)\n",
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="            priority=index,\n            service_tiers=configured if configured is not None else (),\n",
+        new=(
+            "            priority=index,\n"
+            "            **reasoning_levels.catalog_fields(row.id),\n"
+            "            service_tiers=configured if configured is not None else (),\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
 )
 
 

@@ -39,6 +39,7 @@ API_KEY_FILE = TOKEN_DIR / "api-key.json"
 STATE_DIR = Path(os.getenv("COPILOT_STATE_DIR", str(Path(__file__).parent)))
 CONFIG_FILE = STATE_DIR / "config.yaml"
 DEFAULTS_FILE = STATE_DIR / "defaults.env"
+REASONING_FILE = STATE_DIR / "reasoning_efforts.json"
 
 COPILOT_HEADERS = {
     "editor-version": "vscode/1.85.1",
@@ -418,11 +419,32 @@ def tool_defaults(models: list[dict[str, Any]]) -> dict[str, str]:
     return {**claude_defaults(models), **codex_defaults(models)}
 
 
+def _ranked_efforts(model: dict[str, Any]) -> list[str]:
+    """The reasoning efforts Copilot reports for model, weakest first, or an empty list."""
+    efforts = ((model.get("capabilities") or {}).get("supports") or {}).get("reasoning_effort")
+    if not isinstance(efforts, list):
+        return []
+    return sorted(efforts, key=lambda e: _EFFORT_ORDER.index(e) if e in _EFFORT_ORDER else -1)
+
+
+def reasoning_efforts(models: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Every served model name whose model reports reasoning efforts, mapped to them weakest first."""
+    by_id = {model["id"]: model for model in models}
+    efforts: dict[str, list[str]] = {}
+    for route in plan_routes(models):
+        ranked = _ranked_efforts(by_id[route.target.removeprefix("github_copilot/")])
+        if ranked:
+            efforts[route.name] = ranked
+    return efforts
+
+
 def write_config(models: list[dict[str, Any]]) -> None:
-    """Write config.yaml with every route and defaults.env with the Claude Code and Codex defaults."""
+    """Write config.yaml with every route, defaults.env with the Claude Code and Codex defaults, and the
+    reasoning efforts the Codex catalog lists per model."""
     CONFIG_FILE.write_text(render_config(plan_routes(models)))
     defaults = tool_defaults(models)
     DEFAULTS_FILE.write_text("".join(f"{key}={value}\n" for key, value in defaults.items()))
+    REASONING_FILE.write_text(json.dumps(reasoning_efforts(models), indent=1))
 
 
 def _report(models: list[dict[str, Any]]) -> None:
