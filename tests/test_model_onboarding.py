@@ -208,7 +208,7 @@ def test_auto_compact_window_stays_within_claude_code_range() -> None:
 def test_config_serves_native_web_search_from_searxng() -> None:
     """Claude Code's native web_search on Copilot models is intercepted and answered by the bundled SearXNG."""
     config = copilot_auth.render_config([])
-    assert '  callbacks: ["websearch_interception"]\n' in config
+    assert '  callbacks: ["websearch_interception", "codex_tool_search.handler"]\n' in config
     assert '    enabled_providers: ["github_copilot"]\n' in config
     assert "search_tools:\n  - search_tool_name: searxng-search\n" in config
     assert "      search_provider: searxng\n      api_base: http://searxng:8080\n" in config

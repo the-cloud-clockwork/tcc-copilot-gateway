@@ -162,14 +162,14 @@ def streaming_problems() -> list[str]:
 
     events = asyncio.run(run())
     added_items = [getattr(event, "item", None) for event in events if getattr(event, "item", None) is not None]
-    names = [getattr(item, "name", None) for item in added_items]
+    kinds = [(getattr(item, "type", None), getattr(item, "name", None)) for item in added_items]
     found = []
-    if "tool_search" in names:
-        found.append(f"streaming: tool_search function call leaked through, got names {names}")
-    if "zebra_vault_code" not in names:
-        found.append(f"streaming: flattened call was not restored to its own name, got names {names}")
-    namespaces = [getattr(item, "namespace", None) for item in added_items if getattr(item, "name", None) == "zebra_vault_code"]
-    if namespaces != ["mcp__probe"]:
+    if ("function_call", "tool_search") in kinds or ("tool_search_call", "tool_search") not in kinds:
+        found.append(f"streaming: tool_search call not served as tool_search_call, got {kinds}")
+    if ("function_call", "zebra_vault_code") not in kinds or ("function_call", FLAT_NAME) in kinds:
+        found.append(f"streaming: flattened call was not restored to its own name, got {kinds}")
+    namespaces = {getattr(item, "namespace", None) for item in added_items if getattr(item, "name", None) == "zebra_vault_code"}
+    if namespaces != {"mcp__probe"}:
         found.append(f"streaming: flattened call namespace {namespaces}")
     if codex_tool_search.peek_call("call_1") is not None:
         found.append("streaming: the flat name map was not forgotten once the stream ended")
