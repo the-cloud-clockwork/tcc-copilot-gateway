@@ -59,7 +59,22 @@ claude / codex  --HTTP-->  gateway --> api.githubcopilot.com (or the plan's endp
   `/copilot-token`) and `./state` (at `/state`).
 - **searxng:** a pinned image with `searxng/settings.yml` (JSON output, no
   limiter). LiteLLM's `websearch_interception` callback answers Claude Code's
-  and Codex's web-search tool from it.
+  and Codex's web-search tool from it. The default engines (brave, duckduckgo,
+  google cse, wikidata) get suspended for `too many requests` or
+  `access denied`, so the settings also enable bing, yandex, yahoo and mwmbl.
+  `max_agentic_loops: 10` on every route (the `/v1/responses` path reads it
+  from the deployment, not from `websearch_interception_params`) lets one
+  turn run up to ten searches; with the
+  default of 3, Codex models that search more often got the raw
+  `litellm_web_search` call.
+- **Codex tool search:** the `codex_tool_search.handler` callback
+  (`codex_tool_search.py`) emulates Codex's client-executed `tool_search` for
+  every model that is not a stock Codex catalog slug. Copilot rejects
+  `tool_search` for some models and LiteLLM drops it for chat-mode models.
+  The callback sends it as a function tool, turns `tool_search_call` and
+  `tool_search_output` items into function calls and outputs, adds the loaded
+  tools as flat `namespace__name` functions, and maps the model's calls back
+  to `tool_search_call` items and namespaced `function_call` items.
 - **Startup**, in `entrypoint.sh`:
   1. `ca_bundle.py` merges certifi with the host certificates in
      `state/host-ca.pem` into `state/ca-bundle.pem`, and the entrypoint exports
@@ -122,7 +137,7 @@ sources the 0600 secrets file, exports the paths and port, and sources
 
 | Command | What it does |
 |---|---|
-| `c-claude [args]` | Starts the gateway if needed, then runs `claude` with `ANTHROPIC_BASE_URL`, the gateway key, model discovery, the family defaults and the auto-compact window. |
+| `c-claude [args]` | Starts the gateway if needed, then runs `claude` with `ANTHROPIC_BASE_URL`, the gateway key, model discovery, the family defaults and the auto-compact window. It leaves Claude Code's experimental betas on: with `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` set, Claude Code turns tool search off. |
 | `c-codex [args]` | Starts the gateway if needed, then runs `codex` with a `copilot-gateway` provider (Responses API, the gateway's `/models` catalog), the default model and context window. When the reasoning effort in `~/.codex/config.toml` is not one the default model supports, it passes the highest effort that model supports instead. |
 | `cc-copilot` | Runs the stack attached with live logs and a green READY banner. Ctrl-C stops it for every terminal. |
 | `cc-copilot -d` | Runs it detached, showing the log until ready. |
@@ -158,6 +173,8 @@ container. It is only needed for GHE.com data-residency endpoints.
 | `ca_bundle.py` | certifi plus host certificates, valid and deduplicated. |
 | `litellm_patches.py` | Exact-snippet patches to the installed LiteLLM. |
 | `websearch_mixed.py` | Answers web searches made in parallel with other tool calls; installed next to LiteLLM. |
+| `reasoning_levels.py` | Reads `state/reasoning_efforts.json` for the Codex catalog's per-model reasoning levels; installed next to LiteLLM. |
+| `codex_tool_search.py` | LiteLLM callback that emulates Codex's `tool_search` for non-stock models; installed next to LiteLLM. |
 | `searxng/settings.yml` | SearXNG settings. |
 | `requirements.txt` | `litellm[proxy]==1.106.2` and `openai`, exact pins. Change by PR only. |
 | `.env.example` | GHE.com endpoint overrides, copied to `.env` when needed. |
@@ -165,7 +182,7 @@ container. It is only needed for GHE.com data-residency endpoints.
 | `scripts/smoke-models.sh` | Headless call to every model through `c-claude` and `c-codex`. |
 | `scripts/diagnose-tls.sh`, `scripts/export-company-ca.sh` | TLS diagnosis and Windows CA export for networks that inspect HTTPS. |
 | `tests/` | `installer_test.sh` (fake docker, claude, codex, powershell.exe) and the pytest suites. |
-| `state/` | Generated at runtime and gitignored: `config.yaml`, `defaults.env`, `host-ca.pem`, `ca-bundle.pem`, `smoke/`. |
+| `state/` | Generated at runtime and gitignored: `config.yaml`, `defaults.env`, `reasoning_efforts.json`, `host-ca.pem`, `ca-bundle.pem`, `smoke/`. |
 
 ## LiteLLM patches
 
@@ -200,6 +217,23 @@ patch twice is a no-op.
 5. `proxy/common_utils/codex_model_catalog.py`, `_codex_can_drive`: the Codex
    catalog leaves out `claude*` and `anthropic-*` names, which are for Claude
    Code only. `tests/codex_catalog_check.py` checks it in the built image.
+6. `llms/github_copilot/chat/transformation.py`, `_transform_messages`: drops
+   `tool_reference` parts from `role: tool` messages before anything else
+   (issue #23). Claude Code's tool search sends one in each `ToolSearch`
+   result; Copilot's chat endpoint answers `invalid request body` to it, and
+   `GithubCopilotConfig` overrides the OpenAI method that drops it. CI runs
+   `tests/copilot_tool_reference_check.py` in the built image.
+7. `proxy/common_utils/codex_model_catalog.py`, the fallback entries (issue
+   #23):
+   - every entry has `supports_search_tool: true`, so Codex offers
+     `tool_search`;
+   - each entry lists the reasoning efforts Copilot reports for the model
+     (`supported_reasoning_levels`, `default_reasoning_level`), read through
+     `reasoning_levels.py` from `state/reasoning_efforts.json`, which
+     `copilot_auth.py` writes. Codex then clamps a configured effort the model
+     rejects, such as `xhigh` on mai-code-1.1-flash.
+
+   `tests/codex_catalog_check.py` checks both in the built image.
 
 ## Testing
 
@@ -218,6 +252,9 @@ The CI jobs, all required through `Gate — Required`:
 - **compose:**
   - builds the image, which applies the patches;
   - imports the patched modules;
+  - runs the in-image checks: `codex_catalog_check.py`,
+    `websearch_mixed_check.py`, `copilot_tool_reference_check.py` and
+    `codex_tool_search_check.py`;
   - builds a CA bundle from a planted certificate;
   - checks that SearXNG answers JSON.
 

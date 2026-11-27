@@ -1,5 +1,6 @@
 """Model onboarding: a Copilot /models payload becomes LiteLLM routes and Claude Code defaults."""
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -207,7 +208,7 @@ def test_auto_compact_window_stays_within_claude_code_range() -> None:
 def test_config_serves_native_web_search_from_searxng() -> None:
     """Claude Code's native web_search on Copilot models is intercepted and answered by the bundled SearXNG."""
     config = copilot_auth.render_config([])
-    assert '  callbacks: ["websearch_interception"]\n' in config
+    assert '  callbacks: ["websearch_interception", "codex_tool_search.handler"]\n' in config
     assert '    enabled_providers: ["github_copilot"]\n' in config
     assert "search_tools:\n  - search_tool_name: searxng-search\n" in config
     assert "      search_provider: searxng\n      api_base: http://searxng:8080\n" in config
@@ -217,6 +218,20 @@ def test_config_drops_parameters_a_model_does_not_support() -> None:
     """LiteLLM drops any parameter a model does not support, such as Codex's reasoning effort, instead of failing."""
     config = copilot_auth.render_config([])
     assert "litellm_settings:\n  drop_params: true\n" in config
+
+
+def test_config_loads_the_codex_tool_search_callback() -> None:
+    """The gateway runs the callback that emulates Codex's tool_search for models that cannot run it."""
+    config = copilot_auth.render_config(copilot_auth.plan_routes(FIXTURE))
+    assert '  callbacks: ["websearch_interception", "codex_tool_search.handler"]\n' in config
+
+
+def test_config_lets_a_turn_run_ten_web_searches() -> None:
+    """A Codex turn that searches more than three times gets its results instead of the raw search call."""
+    routes = copilot_auth.plan_routes(FIXTURE)
+    config = copilot_auth.render_config(routes)
+    assert "  websearch_interception_params:\n    max_agentic_loops: 10\n" in config
+    assert config.count("      max_agentic_loops: 10\n") == len(routes)
 
 
 def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,3 +248,24 @@ def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: py
     assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000" in defaults
     assert "COPILOT_CODEX_MODEL=gpt-5.4-nano" in defaults
     assert "  - model_name: gpt-6-luna\n" in config
+
+
+def test_reasoning_efforts_list_each_route_weakest_first() -> None:
+    """Every route of a model that reports reasoning efforts lists them weakest first; other models are absent."""
+    models = copy.deepcopy(FIXTURE)
+    luna = next(model for model in models if model["id"] == "gpt-6-luna")
+    luna.setdefault("capabilities", {}).setdefault("supports", {})["reasoning_effort"] = ["high", "low", "medium"]
+    efforts = copilot_auth.reasoning_efforts(models)
+    luna_routes = {route.name for route in copilot_auth.plan_routes(models) if route.target == "github_copilot/gpt-6-luna"}
+    assert set(efforts) == luna_routes
+    assert all(levels == ["low", "medium", "high"] for levels in efforts.values())
+
+
+def test_write_config_writes_the_reasoning_efforts_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """write_config also writes the reasoning efforts the Codex catalog lists per model."""
+    monkeypatch.setattr(copilot_auth, "CONFIG_FILE", tmp_path / "config.yaml")
+    monkeypatch.setattr(copilot_auth, "DEFAULTS_FILE", tmp_path / "defaults.env")
+    monkeypatch.setattr(copilot_auth, "REASONING_FILE", tmp_path / "reasoning_efforts.json")
+    copilot_auth.write_config(FIXTURE)
+    written = json.loads((tmp_path / "reasoning_efforts.json").read_text())
+    assert written == copilot_auth.reasoning_efforts(FIXTURE)

@@ -2,6 +2,8 @@
 !requirements.txt
 !litellm_patches.py
 !websearch_mixed.py
+!reasoning_levels.py
+!codex_tool_search.py
 !ca_bundle.py
 !copilot_auth.py
 !entrypoint.sh

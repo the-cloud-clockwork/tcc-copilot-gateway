@@ -143,6 +143,51 @@ PATCHES = (
         ),
         upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/pull/21",
     ),
+    Patch(
+        path="litellm/llms/github_copilot/chat/transformation.py",
+        old="        import litellm\n\n        # Check if system-to-assistant conversion is disabled\n",
+        new=(
+            "        import litellm\n"
+            "        from litellm.litellm_core_utils.prompt_templates.common_utils import (\n"
+            "            drop_tool_reference_parts_from_tool_messages,\n"
+            "        )\n"
+            "\n"
+            "        messages = drop_tool_reference_parts_from_tool_messages(messages)\n"
+            "        # Check if system-to-assistant conversion is disabled\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="    support_verbosity: Literal[False] = False\n",
+        new="    support_verbosity: Literal[False] = False\n    supports_search_tool: Literal[True] = True\n",
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="    supported_reasoning_levels: tuple[()] = ()\n",
+        new=(
+            "    supported_reasoning_levels: tuple[dict[str, str], ...] = ()\n"
+            "    default_reasoning_level: str | None = None\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="    stock_model: Final = _stock_for(row, stock)\n",
+        new="    import reasoning_levels\n\n    stock_model: Final = _stock_for(row, stock)\n",
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
+    Patch(
+        path="litellm/proxy/common_utils/codex_model_catalog.py",
+        old="            priority=index,\n            service_tiers=configured if configured is not None else (),\n",
+        new=(
+            "            priority=index,\n"
+            "            **reasoning_levels.catalog_fields(row.id),\n"
+            "            service_tiers=configured if configured is not None else (),\n"
+        ),
+        upstream="https://github.com/the-cloud-clockwork/tcc-copilot-gateway/issues/23",
+    ),
 )
 
 
