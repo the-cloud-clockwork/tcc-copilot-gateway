@@ -181,3 +181,27 @@ def test_codex_catalog_patch_offers_tool_search_on_every_fallback_entry(tmp_path
     target.write_text(UPSTREAM_CODEX_FALLBACK)
     assert litellm_patches.apply(patch, tmp_path) == "applied"
     assert "    supports_search_tool: Literal[True] = True\n" in target.read_text()
+
+
+UPSTREAM_CODEX_REASONING = (
+    "    supported_reasoning_levels: tuple[()] = ()\n"
+    "    stock_model: Final = _stock_for(row, stock)\n"
+    "        return CodexFallbackModel(\n"
+    "            priority=index,\n"
+    "            service_tiers=configured if configured is not None else (),\n"
+)
+
+
+def test_codex_catalog_patches_give_fallback_entries_their_reasoning_levels(tmp_path: Path) -> None:
+    """Fallback entries take each model's reasoning levels from reasoning_levels, so Codex clamps the effort."""
+    patches = [p for p in litellm_patches.PATCHES if "reasoning_level" in p.new and p.path.endswith("catalog.py")]
+    target = tmp_path / patches[0].path
+    target.parent.mkdir(parents=True)
+    target.write_text(UPSTREAM_CODEX_REASONING)
+    assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["applied"] * 3
+    text = target.read_text()
+    assert "    supported_reasoning_levels: tuple[dict[str, str], ...] = ()\n" in text
+    assert "    default_reasoning_level: str | None = None\n" in text
+    assert "    import reasoning_levels\n" in text
+    assert text.index("priority=index,") < text.index("**reasoning_levels.catalog_fields(row.id),")
+    assert [litellm_patches.apply(patch, tmp_path) for patch in patches] == ["already applied"] * 3

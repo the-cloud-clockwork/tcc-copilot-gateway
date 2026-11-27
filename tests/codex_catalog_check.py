@@ -1,7 +1,9 @@
 """Checks the Codex model catalog the patched LiteLLM in the gateway image serves; run with the image's python."""
 
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from litellm.proxy.common_utils.codex_model_catalog import (
@@ -13,6 +15,7 @@ from litellm.proxy.common_utils.codex_model_catalog import (
 import copilot_auth
 
 FIXTURE = Path(__file__).parent / "fixtures" / "copilot_models.json"
+LEVELS = ("low", "medium", "high")
 CLAUDE_CODE_ONLY = copilot_auth.CLAUDE_CODE_PREFIXES
 GROK_ROUTES = {
     "grok-4.7": "grok-4.7",
@@ -70,13 +73,33 @@ def problems(entries: dict[str, dict], listed: list[CodexCatalogRow]) -> list[st
 def main() -> int:
     """Print every problem and exit 1 when there is one."""
     listed = rows()
-    body = codex_models_response_json(listed, byte_limit=None)
+    with tempfile.TemporaryDirectory() as state:
+        efforts = {row.id: list(LEVELS) for row in listed}
+        (Path(state) / "reasoning_efforts.json").write_text(json.dumps(efforts))
+        os.environ["COPILOT_STATE_DIR"] = state
+        body = codex_models_response_json(listed, byte_limit=None)
     entries = {entry["slug"]: entry for entry in json.loads(body.json)["models"]}
-    found = problems(entries, listed)
+    found = problems(entries, listed) + reasoning_problems(entries, listed)
     for line in found:
         print(line)
     print(f"{len(found)} problems in {len(entries)} catalog entries for {len(listed)} served models")
     return 1 if found else 0
+
+
+def reasoning_problems(entries: dict[str, dict], listed: list[CodexCatalogRow]) -> list[str]:
+    """Every entry built for a model Codex does not know must list the reasoning levels the gateway wrote for it,
+    with medium as its default, so Codex clamps a configured effort the model rejects."""
+    stock = bundled_codex_models()
+    found = []
+    for row in listed:
+        entry = entries.get(row.id)
+        upstream = (row.upstream_model or "").partition("/")[2]
+        if entry is None or row.id in stock or upstream in stock:
+            continue
+        levels = [level.get("effort") for level in entry.get("supported_reasoning_levels") or ()]
+        if levels != list(LEVELS) or entry.get("default_reasoning_level") != "medium":
+            found.append(f"{row.id}: reasoning levels {levels}, default {entry.get('default_reasoning_level')!r}")
+    return found
 
 
 if __name__ == "__main__":

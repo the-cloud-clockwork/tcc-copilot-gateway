@@ -1,5 +1,6 @@
 """Model onboarding: a Copilot /models payload becomes LiteLLM routes and Claude Code defaults."""
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -233,3 +234,24 @@ def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: py
     assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000" in defaults
     assert "COPILOT_CODEX_MODEL=gpt-5.4-nano" in defaults
     assert "  - model_name: gpt-6-luna\n" in config
+
+
+def test_reasoning_efforts_list_each_route_weakest_first() -> None:
+    """Every route of a model that reports reasoning efforts lists them weakest first; other models are absent."""
+    models = copy.deepcopy(FIXTURE)
+    luna = next(model for model in models if model["id"] == "gpt-6-luna")
+    luna.setdefault("capabilities", {}).setdefault("supports", {})["reasoning_effort"] = ["high", "low", "medium"]
+    efforts = copilot_auth.reasoning_efforts(models)
+    luna_routes = {route.name for route in copilot_auth.plan_routes(models) if route.target == "github_copilot/gpt-6-luna"}
+    assert set(efforts) == luna_routes
+    assert all(levels == ["low", "medium", "high"] for levels in efforts.values())
+
+
+def test_write_config_writes_the_reasoning_efforts_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """write_config also writes the reasoning efforts the Codex catalog lists per model."""
+    monkeypatch.setattr(copilot_auth, "CONFIG_FILE", tmp_path / "config.yaml")
+    monkeypatch.setattr(copilot_auth, "DEFAULTS_FILE", tmp_path / "defaults.env")
+    monkeypatch.setattr(copilot_auth, "REASONING_FILE", tmp_path / "reasoning_efforts.json")
+    copilot_auth.write_config(FIXTURE)
+    written = json.loads((tmp_path / "reasoning_efforts.json").read_text())
+    assert written == copilot_auth.reasoning_efforts(FIXTURE)
