@@ -56,7 +56,7 @@ mkdir -p "$HOME/bin" "$HOME/www/v1"
 printf '{"data": []}' > "$HOME/www/v1/models"
 cat > "$HOME/bin/claude" <<'FAKE'
 #!/bin/sh
-echo "BASE=${ANTHROPIC_BASE_URL:-none} TOKEN=${ANTHROPIC_AUTH_TOKEN:+set}"
+echo "BASE=${ANTHROPIC_BASE_URL:-none} TOKEN=${ANTHROPIC_AUTH_TOKEN:+set} BETAS=${CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS:-on}"
 FAKE
 cat > "$HOME/bin/codex" <<'FAKE'
 #!/bin/sh
@@ -86,7 +86,8 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
   curl -s -o /dev/null "http://localhost:$PORT/v1/models" && break
   sleep 1
 done
-[[ "$(alias_run c-claude)" == "BASE=http://localhost:$PORT TOKEN=set" ]] || fail "c-claude did not go to the gateway"
+[[ "$(alias_run c-claude)" == "BASE=http://localhost:$PORT TOKEN=set BETAS=on" ]] \
+  || fail "c-claude did not go to the gateway with Claude Code's experimental betas (tool search) on"
 mkdir -p "$REPO/state" "$HOME/.codex"
 printf 'COPILOT_CODEX_MODEL=gpt-test\nCOPILOT_CODEX_REASONING_EFFORTS=none low high xhigh\n' > "$REPO/state/defaults.env"
 printf 'model_reasoning_effort = "max"\n' > "$HOME/.codex/config.toml"

@@ -143,3 +143,45 @@ def test_mixed_search_patches_answer_mixed_responses_before_the_agentic_loop(tmp
     assert text.index("async_build_chat_completion_agentic_loop_plan") < chat < text.index('response_format: Final')
     assert text.index("async_build_responses_agentic_loop_plan") < responses < text.index("request_patch: Final")
     assert text.count("AgenticLoopPlan(run_agentic_loop=False, response_override=override") == 2
+
+
+UPSTREAM_COPILOT_MESSAGES = (
+    "    def _transform_messages(\n"
+    "        self,\n"
+    "        messages,\n"
+    "        model: str,\n"
+    "    ):\n"
+    "        import litellm\n"
+    "\n"
+    "        # Check if system-to-assistant conversion is disabled\n"
+)
+
+
+def test_copilot_messages_patch_drops_tool_reference_parts_first(tmp_path: Path) -> None:
+    """Copilot chat requests lose the tool_reference parts of tool messages before any other message change."""
+    patch = next(p for p in litellm_patches.PATCHES if p.path == "litellm/llms/github_copilot/chat/transformation.py")
+    target = tmp_path / patch.path
+    target.parent.mkdir(parents=True)
+    target.write_text(UPSTREAM_COPILOT_MESSAGES)
+    assert litellm_patches.apply(patch, tmp_path) == "applied"
+    text = target.read_text()
+    assert "messages = drop_tool_reference_parts_from_tool_messages(messages)\n" in text
+    assert text.index("drop_tool_reference_parts_from_tool_messages(messages)") < text.index("# Check if system")
+    assert litellm_patches.apply(patch, tmp_path) == "already applied"
+
+
+UPSTREAM_CODEX_FALLBACK = (
+    "    experimental_supported_tools: tuple[()] = ()\n"
+    '    multi_agent_version: Literal["disabled"] | None = None\n'
+    "    context_window: int | None\n"
+)
+
+
+def test_codex_catalog_patch_offers_tool_search_on_every_fallback_entry(tmp_path: Path) -> None:
+    """Fallback catalog entries carry supports_search_tool, so Codex offers tool_search for every gateway model."""
+    patch = next(p for p in litellm_patches.PATCHES if "supports_search_tool" in p.new)
+    target = tmp_path / patch.path
+    target.parent.mkdir(parents=True)
+    target.write_text(UPSTREAM_CODEX_FALLBACK)
+    assert litellm_patches.apply(patch, tmp_path) == "applied"
+    assert "    supports_search_tool: Literal[True] = True\n" in target.read_text()

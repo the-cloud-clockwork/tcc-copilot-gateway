@@ -39,7 +39,8 @@ def problems(entries: dict[str, dict], listed: list[CodexCatalogRow]) -> list[st
     """Every way the catalog differs from what Codex on Copilot needs: a served model left out; an entry built
     from a stock slug whose use_responses_lite is not exactly false (Codex then sends no web_search tool) or whose
     tool_mode is not the stock one (the patches leave tool modes alone); a grok entry whose multi_agent_version is
-    not "disabled" (Copilot's grok provider rejects namespace tools); any other entry with it set."""
+    not "disabled" (Copilot's grok provider rejects namespace tools); any other entry with it set; an entry without
+    supports_search_tool (Codex then never offers tool_search for that model)."""
     stock = bundled_codex_models()
     found = []
     for row in listed:
@@ -51,6 +52,8 @@ def problems(entries: dict[str, dict], listed: list[CodexCatalogRow]) -> list[st
                 found.append(f"{row.id}: served to Claude Code only, but listed for Codex")
         elif entry is None:
             found.append(f"{row.id}: missing from the catalog")
+        elif entry.get("supports_search_tool") is not True:
+            found.append(f"{row.id}: supports_search_tool is {entry.get('supports_search_tool')!r}, not True")
         elif stock_slug is not None:
             if entry.get("use_responses_lite") is not False:
                 found.append(f"{row.id}: use_responses_lite is {entry.get('use_responses_lite')!r}, not False")
