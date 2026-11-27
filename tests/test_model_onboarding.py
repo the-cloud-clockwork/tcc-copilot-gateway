@@ -228,8 +228,10 @@ def test_config_loads_the_codex_tool_search_callback() -> None:
 
 def test_config_lets_a_turn_run_ten_web_searches() -> None:
     """A Codex turn that searches more than three times gets its results instead of the raw search call."""
-    config = copilot_auth.render_config(copilot_auth.plan_routes(FIXTURE))
+    routes = copilot_auth.plan_routes(FIXTURE)
+    config = copilot_auth.render_config(routes)
     assert "  websearch_interception_params:\n    max_agentic_loops: 10\n" in config
+    assert config.count("      max_agentic_loops: 10\n") == len(routes)
 
 
 def test_write_config_writes_config_and_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
